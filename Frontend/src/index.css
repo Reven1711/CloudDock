@@ -1,0 +1,173 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 240 20% 98%;
+    --foreground: 240 10% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 10%;
+
+    --primary: 260 100% 65%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 100% 65%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 240 10% 95%;
+    --muted-foreground: 240 5% 45%;
+
+    --accent: 280 100% 70%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 20% 90%;
+    --input: 240 20% 94%;
+    --ring: 260 100% 65%;
+
+    --radius: 1rem;
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(260 100% 65%), hsl(220 100% 65%));
+    --gradient-secondary: linear-gradient(135deg, hsl(280 100% 70%), hsl(260 100% 65%));
+    --gradient-glass: linear-gradient(135deg, hsla(0 0% 100% / 0.1), hsla(0 0% 100% / 0.05));
+    
+    /* Shadows */
+    --shadow-primary: 0 20px 60px -15px hsl(260 100% 65% / 0.3);
+    --shadow-glass: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+    --shadow-card: 0 4px 20px 0 rgba(0, 0, 0, 0.08);
+    
+    /* Animations */
+    --transition-base: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-fast: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 240 20% 8%;
+    --foreground: 240 10% 95%;
+
+    --card: 240 15% 12%;
+    --card-foreground: 240 10% 95%;
+
+    --popover: 240 15% 12%;
+    --popover-foreground: 240 10% 95%;
+
+    --primary: 260 100% 65%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 100% 65%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 240 10% 18%;
+    --muted-foreground: 240 5% 60%;
+
+    --accent: 280 100% 70%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 10% 20%;
+    --input: 240 10% 18%;
+    --ring: 260 100% 65%;
+    
+    --gradient-glass: linear-gradient(135deg, hsla(0 0% 100% / 0.05), hsla(0 0% 100% / 0.02));
+    --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply backdrop-blur-xl bg-white/10 border border-white/20;
+  }
+  
+  .glass-card {
+    @apply backdrop-blur-xl bg-white/60 dark:bg-white/5 border border-white/20 shadow-lg;
+  }
+  
+  .neumorphic-card {
+    background: hsl(var(--background));
+    border-radius: var(--radius);
+    box-shadow: 12px 12px 24px hsl(var(--background) / 0.7), -12px -12px 24px hsl(var(--background) / 0.7), inset 0 0 0 1px hsl(var(--border));
+    border: 1px solid hsl(var(--border));
+  }
+  
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+  
+  .animate-scale-in {
+    animation: scaleIn 0.2s ease-out;
+  }
+  
+  .hover-lift {
+    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-xl;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
