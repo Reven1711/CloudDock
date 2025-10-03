@@ -1,0 +1,30 @@
+{
+  "name": "clouddock-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "dev:gateway": "node gateway/src/index.js",
+    "dev:core": "node src/index.js",
+    "dev:auth": "node services/auth/src/index.js",
+    "dev:org": "node services/org/src/index.js",
+    "dev:user": "node services/user/src/index.js",
+    "dev:files": "node services/files/src/index.js",
+    "dev:billing": "node services/billing/src/index.js",
+    "dev:ui": "node services/ui/src/index.js",
+    "dev:all": "concurrently -n gateway,auth,org,user,files,billing,ui -c blue,magenta,green,yellow,cyan,red,gray \"npm:dev:gateway\" \"npm:dev:auth\" \"npm:dev:org\" \"npm:dev:user\" \"npm:dev:files\" \"npm:dev:billing\" \"npm:dev:ui\""
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "http-proxy": "^1.18.1",
+    "mongoose": "^8.5.1",
+    "concurrently": "^8.2.2"
+  }
+}
+
+

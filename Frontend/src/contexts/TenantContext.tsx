@@ -134,6 +134,30 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [tenant, setTenant] = useState<TenantConfig>(defaultTenant);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Load tenant from localStorage on first mount
+  useEffect(() => {
+    setIsLoading(true);
+    try {
+      const stored = localStorage.getItem('tenant-config');
+      if (stored) {
+        const parsed = JSON.parse(stored) as TenantConfig;
+        if (parsed && parsed.tenantId) {
+          setTenant(parsed);
+        }
+      } else {
+        const storedId = localStorage.getItem('tenant-id');
+        if (storedId) {
+          const fromPreset = tenantPresets.find(t => t.tenantId === storedId);
+          if (fromPreset) setTenant(fromPreset);
+        }
+      }
+    } catch {
+      // ignore corrupted storage
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     // Apply tenant theme colors, gradients, theme class, and font as CSS variables
     const root = document.documentElement;
@@ -191,6 +215,13 @@ export const TenantProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     // Apply font family
     document.body.style.fontFamily = tenant.branding.fontFamily;
+    // Persist tenant to localStorage
+    try {
+      localStorage.setItem('tenant-config', JSON.stringify(tenant));
+      localStorage.setItem('tenant-id', tenant.tenantId);
+    } catch {
+      // ignore quota errors
+    }
   }, [tenant]);
 
   return (

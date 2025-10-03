@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Cloud, Lock, Mail, Building2 } from 'lucide-react';
+import { Cloud, Lock, Mail, Building2, User as UserIcon, Factory } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,27 +12,46 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useTenant } from '@/contexts/TenantContext';
+import { tenantPresets } from '@/contexts/TenantContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Auth = () => {
   const navigate = useNavigate();
   const { setTenant } = useTenant();
+  const { signUpOrganization, signUpUser, user } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
+  const [isOrgSignup, setIsOrgSignup] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [orgSigninName, setOrgSigninName] = useState('');
 
-  // Mock tenant list - in real app, fetch from API
-  const tenants = [
-    { id: 'acme', name: 'Acme Corp' },
-    { id: 'techstart', name: 'TechStart Inc' },
-    { id: 'cloudflow', name: 'CloudFlow Solutions' },
-  ];
+  // In real app, fetch available tenants for the user or infer from subdomain
+  const tenants = tenantPresets.map(p => ({ id: p.tenantId, name: p.tenantId }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Mock authentication - in real app, call API
-    if (selectedTenant && email && password) {
-      // Navigate to dashboard
+    if (isOrgSignup) {
+      if (!companyName || !name || !email || !password) return;
+      const tenantId = companyName.trim().toLowerCase().replace(/\s+/g, '-');
+      const admin = await signUpOrganization({ tenantId, companyName, adminName: name, adminEmail: email, password });
+      const preset = tenantPresets.find(t => t.tenantId === tenantId) || tenantPresets[0];
+      setTenant({ ...preset, tenantId, branding: { ...preset.branding } });
+      navigate('/onboarding');
+    } else if (!isLogin) {
+      if (!selectedTenant || !name || !email || !password) return;
+      await signUpUser({ tenantId: selectedTenant, name, email, password });
+      const preset = tenantPresets.find(t => t.tenantId === selectedTenant);
+      if (preset) setTenant(preset);
+      navigate('/dashboard');
+    } else {
+      // Sign in: organization name + email + password
+      if (!orgSigninName || !email || !password) return;
+      const tenantId = orgSigninName.trim().toLowerCase().replace(/\s+/g, '-');
+      const preset = tenantPresets.find(t => t.tenantId === tenantId) || tenantPresets[0];
+      setTenant({ ...preset, tenantId, branding: { ...preset.branding } });
       navigate('/dashboard');
     }
   };
@@ -61,35 +80,100 @@ const Auth = () => {
 
         {/* Auth Card */}
         <div className="glass-card rounded-3xl p-8 shadow-glass">
+          {!isLogin && (
+            <div className="mb-2 flex items-center gap-2">
+              <Button variant={isOrgSignup ? 'default' : 'outline'} onClick={() => setIsOrgSignup(true)} className={isOrgSignup ? 'bg-gradient-primary text-white' : ''}>
+                <Factory className="w-4 h-4 mr-2" /> Organization
+              </Button>
+              <Button variant={!isOrgSignup ? 'default' : 'outline'} onClick={() => setIsOrgSignup(false)} className={!isOrgSignup ? 'bg-gradient-primary text-white' : ''}>
+                <UserIcon className="w-4 h-4 mr-2" /> User
+              </Button>
+            </div>
+          )}
           <div className="mb-6">
             <h2 className="text-2xl font-semibold mb-2">
-              {isLogin ? 'Welcome back' : 'Create account'}
+              {isLogin ? 'Sign in' : isOrgSignup ? 'Create organization' : 'Create user account'}
             </h2>
             <p className="text-sm text-muted-foreground">
-              {isLogin ? 'Sign in to your account' : 'Get started with Skyvault'}
+              {isLogin ? 'Enter your organization, email and password' : isOrgSignup ? 'Set up your organization and admin' : 'Join an existing organization'}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Tenant Selection */}
-            <div className="space-y-2">
-              <Label htmlFor="tenant" className="flex items-center gap-2">
-                <Building2 className="w-4 h-4" />
-                Select Tenant
-              </Label>
-              <Select value={selectedTenant} onValueChange={setSelectedTenant}>
-                <SelectTrigger className="glass-card border-primary/20">
-                  <SelectValue placeholder="Choose your organization" />
-                </SelectTrigger>
-                <SelectContent className="glass-card">
-                  {tenants.map((tenant) => (
-                    <SelectItem key={tenant.id} value={tenant.id}>
-                      {tenant.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {!isLogin && !isOrgSignup && (
+              <div className="space-y-2">
+                <Label htmlFor="tenant" className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
+                  Select Organization
+                </Label>
+                <Select value={selectedTenant} onValueChange={setSelectedTenant}>
+                  <SelectTrigger className="glass-card border-primary/20">
+                    <SelectValue placeholder="Choose your organization" />
+                  </SelectTrigger>
+                  <SelectContent className="glass-card">
+                    {tenants.map((tenant) => (
+                      <SelectItem key={tenant.id} value={tenant.id}>
+                        {tenant.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {isLogin && (
+              <div className="space-y-2">
+                <Label htmlFor="org" className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
+                  Organization Name
+                </Label>
+                <Input
+                  id="org"
+                  type="text"
+                  placeholder="Acme Corp"
+                  value={orgSigninName}
+                  onChange={(e) => setOrgSigninName(e.target.value)}
+                  className="glass-card border-primary/20"
+                  required
+                />
+              </div>
+            )}
+            {!isLogin && (
+              <div className="space-y-2">
+                <Label htmlFor="name" className="flex items-center gap-2">
+                  <UserIcon className="w-4 h-4" />
+                  {isOrgSignup ? 'Admin Name' : 'Full Name'}
+                </Label>
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="John Doe"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="glass-card border-primary/20"
+                  required
+                />
+              </div>
+            )}
+
+            {/* Company Name */}
+            {!isLogin && isOrgSignup && (
+              <div className="space-y-2">
+                <Label htmlFor="company" className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
+                  Company Name
+                </Label>
+                <Input
+                  id="company"
+                  type="text"
+                  placeholder="Acme Corp"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  className="glass-card border-primary/20"
+                  required
+                />
+              </div>
+            )}
 
             {/* Email */}
             <div className="space-y-2">

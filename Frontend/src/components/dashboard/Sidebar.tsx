@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTenant } from '@/contexts/TenantContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 const navigationItems = [
   { name: 'Dashboard', icon: Home, path: '/dashboard' },
@@ -29,6 +30,7 @@ const bottomItems = [
 
 export const Sidebar = () => {
   const { tenant } = useTenant();
+  const { user } = useAuth();
   return (
     <aside
       className="w-64 h-screen glass-card border-r border-white/10 flex flex-col"
@@ -102,6 +104,23 @@ export const Sidebar = () => {
             <span className="font-medium">{item.name}</span>
           </NavLink>
         ))}
+        {user?.role === 'admin' && (
+          <NavLink
+            to="/admin"
+            className={({ isActive }) =>
+              cn(
+                'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200',
+                'hover:bg-white/10',
+                isActive
+                  ? 'bg-white/10 text-foreground'
+                  : 'text-foreground/70 hover:text-foreground'
+              )
+            }
+          >
+            <Users className="w-5 h-5" />
+            <span className="font-medium">Admin</span>
+          </NavLink>
+        )}
       </div>
     </aside>
   );
