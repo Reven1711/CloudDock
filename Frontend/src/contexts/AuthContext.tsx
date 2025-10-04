@@ -21,6 +21,7 @@ interface AuthContextType {
   user: AuthUser | null;
   usage: TenantUsage | null;
   signOut: () => void;
+  signIn: (args: { mode: 'org' | 'user'; tenantId: string; email: string; password: string }) => Promise<AuthUser>;
   signUpOrganization: (args: { tenantId: string; companyName: string; adminName: string; adminEmail: string; password: string }) => Promise<AuthUser>;
   signUpUser: (args: { tenantId: string; name: string; email: string; password: string }) => Promise<AuthUser>;
   approveUser: (userId: string) => Promise<void>;
@@ -97,6 +98,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return newUser;
   };
 
+  const signIn: AuthContextType['signIn'] = async ({ mode, tenantId, email }) => {
+    // Mock sign-in behavior
+    ensureTenantUsage(tenantId);
+    if (mode === 'org') {
+      const adminUser: AuthUser = {
+        id: `admin_${tenantId}`,
+        name: 'Org Admin',
+        email,
+        role: 'admin',
+        tenantId,
+        approved: true,
+      };
+      persistUser(adminUser);
+      return adminUser;
+    }
+    // user mode: if pending exists, keep pending; else active user
+    const pendingRaw = localStorage.getItem(STORAGE_KEYS.pendingUsers);
+    const list = pendingRaw ? (JSON.parse(pendingRaw) as AuthUser[]) : [];
+    const found = list.find(u => u.tenantId === tenantId && u.email.toLowerCase() === email.toLowerCase());
+    const userToPersist: AuthUser = found ?? {
+      id: `user_${tenantId}_${Date.now()}`,
+      name: 'User',
+      email,
+      role: 'user',
+      tenantId,
+      approved: true,
+    };
+    persistUser(userToPersist);
+    return userToPersist;
+  };
+
   const signUpUser: AuthContextType['signUpUser'] = async ({ tenantId, name, email }) => {
     // Mock: create pending user
     const pendingRaw = localStorage.getItem(STORAGE_KEYS.pendingUsers);
@@ -138,6 +170,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     user,
     usage,
     signOut: () => persistUser(null),
+    signIn,
     signUpOrganization,
     signUpUser,
     approveUser,

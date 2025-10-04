@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { connectMongo } from "../../../src/db/connection.js";
+import { ensureCollections } from "../../../src/db/ensure.js";
 import { env } from "../../../src/config/env.js";
 
 const PORT = Number(process.env.USER_SERVICE_PORT || 4003);
@@ -18,6 +19,7 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 
 export async function startUserService() {
   await connectMongo();
+  await ensureCollections("user");
   app.listen(PORT, () => console.log(`[user] listening on :${PORT}`));
 }
 

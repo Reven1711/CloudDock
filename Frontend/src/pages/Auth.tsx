@@ -18,9 +18,10 @@ import { useAuth } from '@/contexts/AuthContext';
 const Auth = () => {
   const navigate = useNavigate();
   const { setTenant } = useTenant();
-  const { signUpOrganization, signUpUser, user } = useAuth();
+  const { signUpOrganization, signUpUser, signIn, user } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [isOrgSignup, setIsOrgSignup] = useState(false);
+  const [signinMode, setSigninMode] = useState<'org' | 'user'>('user');
   const [selectedTenant, setSelectedTenant] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,7 +40,7 @@ const Auth = () => {
       const admin = await signUpOrganization({ tenantId, companyName, adminName: name, adminEmail: email, password });
       const preset = tenantPresets.find(t => t.tenantId === tenantId) || tenantPresets[0];
       setTenant({ ...preset, tenantId, branding: { ...preset.branding } });
-      navigate('/onboarding');
+      navigate('/dashboard');
     } else if (!isLogin) {
       if (!selectedTenant || !name || !email || !password) return;
       await signUpUser({ tenantId: selectedTenant, name, email, password });
@@ -47,12 +48,22 @@ const Auth = () => {
       if (preset) setTenant(preset);
       navigate('/dashboard');
     } else {
-      // Sign in: organization name + email + password
-      if (!orgSigninName || !email || !password) return;
-      const tenantId = orgSigninName.trim().toLowerCase().replace(/\s+/g, '-');
-      const preset = tenantPresets.find(t => t.tenantId === tenantId) || tenantPresets[0];
-      setTenant({ ...preset, tenantId, branding: { ...preset.branding } });
-      navigate('/dashboard');
+      // Sign in with selected mode
+      if (signinMode === 'org') {
+        if (!orgSigninName || !email || !password) return;
+        const tenantId = orgSigninName.trim().toLowerCase().replace(/\s+/g, '-');
+        await signIn({ mode: 'org', tenantId, email, password });
+        const preset = tenantPresets.find(t => t.tenantId === tenantId) || tenantPresets[0];
+        setTenant({ ...preset, tenantId, branding: { ...preset.branding } });
+        navigate('/dashboard');
+      } else {
+        // user sign in uses dropdown tenant
+        if (!selectedTenant || !email || !password) return;
+        await signIn({ mode: 'user', tenantId: selectedTenant, email, password });
+        const preset = tenantPresets.find(t => t.tenantId === selectedTenant);
+        if (preset) setTenant(preset);
+        navigate('/dashboard');
+      }
     }
   };
 
@@ -90,6 +101,17 @@ const Auth = () => {
               </Button>
             </div>
           )}
+
+          {isLogin && (
+            <div className="mb-2 flex items-center gap-2">
+              <Button variant={signinMode === 'org' ? 'default' : 'outline'} onClick={() => setSigninMode('org')} className={signinMode === 'org' ? 'bg-gradient-primary text-white' : ''}>
+                <Factory className="w-4 h-4 mr-2" /> Org Sign In
+              </Button>
+              <Button variant={signinMode === 'user' ? 'default' : 'outline'} onClick={() => setSigninMode('user')} className={signinMode === 'user' ? 'bg-gradient-primary text-white' : ''}>
+                <UserIcon className="w-4 h-4 mr-2" /> User Sign In
+              </Button>
+            </div>
+          )}
           <div className="mb-6">
             <h2 className="text-2xl font-semibold mb-2">
               {isLogin ? 'Sign in' : isOrgSignup ? 'Create organization' : 'Create user account'}
@@ -121,7 +143,7 @@ const Auth = () => {
               </div>
             )}
 
-            {isLogin && (
+            {isLogin && signinMode === 'org' && (
               <div className="space-y-2">
                 <Label htmlFor="org" className="flex items-center gap-2">
                   <Building2 className="w-4 h-4" />

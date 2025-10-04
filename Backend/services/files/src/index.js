@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { connectMongo } from "../../../src/db/connection.js";
+import { ensureCollections } from "../../../src/db/ensure.js";
 import { env } from "../../../src/config/env.js";
 
 const PORT = Number(process.env.FILE_SERVICE_PORT || 4004);
@@ -18,6 +19,7 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 
 export async function startFileService() {
   await connectMongo();
+  await ensureCollections("files");
   app.listen(PORT, () => console.log(`[files] listening on :${PORT}`));
 }
 

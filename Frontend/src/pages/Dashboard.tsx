@@ -139,6 +139,23 @@ const Dashboard = () => {
                   </div>
                   )}
 
+          {/* Admin inline controls */}
+          {user?.role === 'admin' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div className="glass-card rounded-2xl p-6">
+                <h3 className="font-semibold mb-2">Admin Quick Links</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button onClick={() => (window.location.href = '/admin')} className="bg-gradient-primary text-white">Pending Approvals</Button>
+                  <Button onClick={() => (window.location.href = '/dashboard/settings')} variant="outline" className="glass-card border-primary/20 hover:border-primary/40">Customize UI</Button>
+                </div>
+              </div>
+              <div className="glass-card rounded-2xl p-6">
+                <h3 className="font-semibold mb-2">Storage Quota</h3>
+                <p className="text-sm text-muted-foreground">50 GB free tier per organization</p>
+              </div>
+            </div>
+          )}
+
           {/* Files Header and Approval Notice */}
           {!user?.approved && (
             <div className="glass-card rounded-2xl p-4 mb-4">

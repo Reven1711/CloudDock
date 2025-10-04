@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { connectMongo } from "../../../src/db/connection.js";
+import { ensureCollections } from "../../../src/db/ensure.js";
 import { env } from "../../../src/config/env.js";
 
 const PORT = Number(process.env.AUTH_SERVICE_PORT || 4001);
@@ -18,6 +19,7 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 
 export async function startAuthService() {
   await connectMongo();
+  await ensureCollections("auth");
   app.listen(PORT, () => console.log(`[auth] listening on :${PORT}`));
 }
 
