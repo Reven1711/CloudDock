@@ -2,6 +2,7 @@ import mongoose, { Schema } from "mongoose";
 
 const UserSchema = new Schema({
   userId: { type: String, required: true, unique: true, index: true },
+  name: { type: String, required: true },
   email: { type: String, required: true, index: true },
   passwordHash: { type: String, required: true },
   tenantId: { type: String, required: true }, // orgId

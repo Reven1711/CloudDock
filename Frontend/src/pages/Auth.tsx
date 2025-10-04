@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Cloud, Lock, Mail, Building2, User as UserIcon, Factory } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -28,42 +28,71 @@ const Auth = () => {
   const [name, setName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [orgSigninName, setOrgSigninName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  // In real app, fetch available tenants for the user or infer from subdomain
-  const tenants = tenantPresets.map(p => ({ id: p.tenantId, name: p.tenantId }));
+  // Fetch available organizations from API
+  const [tenants, setTenants] = useState<{ id: string; name: string }[]>([]);
+  
+  useEffect(() => {
+    const fetchOrgs = async () => {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000'}/org`);
+        if (response.ok) {
+          const data = await response.json();
+          setTenants(data.organizations || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch organizations:', error);
+        // Fallback to presets
+        setTenants(tenantPresets.map(p => ({ id: p.tenantId, name: p.tenantId })));
+      }
+    };
+    fetchOrgs();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isOrgSignup) {
-      if (!companyName || !name || !email || !password) return;
-      const tenantId = companyName.trim().toLowerCase().replace(/\s+/g, '-');
-      const admin = await signUpOrganization({ tenantId, companyName, adminName: name, adminEmail: email, password });
-      const preset = tenantPresets.find(t => t.tenantId === tenantId) || tenantPresets[0];
-      setTenant({ ...preset, tenantId, branding: { ...preset.branding } });
-      navigate('/dashboard');
-    } else if (!isLogin) {
-      if (!selectedTenant || !name || !email || !password) return;
-      await signUpUser({ tenantId: selectedTenant, name, email, password });
-      const preset = tenantPresets.find(t => t.tenantId === selectedTenant);
-      if (preset) setTenant(preset);
-      navigate('/dashboard');
-    } else {
-      // Sign in with selected mode
-      if (signinMode === 'org') {
-        if (!orgSigninName || !email || !password) return;
-        const tenantId = orgSigninName.trim().toLowerCase().replace(/\s+/g, '-');
-        await signIn({ mode: 'org', tenantId, email, password });
+    setIsLoading(true);
+    setError('');
+    
+    try {
+      if (isOrgSignup) {
+        if (!companyName || !name || !email || !password) return;
+        const tenantId = companyName.trim().toLowerCase().replace(/\s+/g, '-');
+        const admin = await signUpOrganization({ tenantId, companyName, adminName: name, adminEmail: email, password });
         const preset = tenantPresets.find(t => t.tenantId === tenantId) || tenantPresets[0];
         setTenant({ ...preset, tenantId, branding: { ...preset.branding } });
         navigate('/dashboard');
-      } else {
-        // user sign in uses dropdown tenant
-        if (!selectedTenant || !email || !password) return;
-        await signIn({ mode: 'user', tenantId: selectedTenant, email, password });
+      } else if (!isLogin) {
+        if (!selectedTenant || !name || !email || !password) return;
+        await signUpUser({ tenantId: selectedTenant, name, email, password });
         const preset = tenantPresets.find(t => t.tenantId === selectedTenant);
         if (preset) setTenant(preset);
         navigate('/dashboard');
+      } else {
+        // Sign in with selected mode
+        if (signinMode === 'org') {
+          if (!orgSigninName || !email || !password) return;
+          const tenantId = orgSigninName.trim().toLowerCase().replace(/\s+/g, '-');
+          await signIn({ mode: 'org', tenantId, email, password });
+          const preset = tenantPresets.find(t => t.tenantId === tenantId) || tenantPresets[0];
+          setTenant({ ...preset, tenantId, branding: { ...preset.branding } });
+          navigate('/dashboard');
+        } else {
+          // user sign in uses dropdown tenant
+          if (!selectedTenant || !email || !password) return;
+          await signIn({ mode: 'user', tenantId: selectedTenant, email, password });
+          const preset = tenantPresets.find(t => t.tenantId === selectedTenant);
+          if (preset) setTenant(preset);
+          navigate('/dashboard');
+        }
       }
+    } catch (error) {
+      console.error('Auth error:', error);
+      setError(error.message || 'Authentication failed');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -120,6 +149,12 @@ const Auth = () => {
               {isLogin ? 'Enter your organization, email and password' : isOrgSignup ? 'Set up your organization and admin' : 'Join an existing organization'}
             </p>
           </div>
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+              {error}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && !isOrgSignup && (
@@ -234,9 +269,10 @@ const Auth = () => {
             {/* Submit Button */}
             <Button
               type="submit"
-              className="w-full bg-gradient-primary hover:opacity-90 text-white shadow-primary transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5"
+              disabled={isLoading}
+              className="w-full bg-gradient-primary hover:opacity-90 text-white shadow-primary transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-50"
             >
-              {isLogin ? 'Sign In' : 'Create Account'}
+              {isLoading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
             </Button>
           </form>
 

@@ -3,6 +3,7 @@ import cors from "cors";
 import { connectMongo } from "../../../src/db/connection.js";
 import { ensureCollections } from "../../../src/db/ensure.js";
 import { env } from "../../../src/config/env.js";
+import orgRoutes from "./routes/orgRoutes.js";
 
 const PORT = Number(process.env.ORG_SERVICE_PORT || 4002);
 
@@ -10,10 +11,8 @@ const app = express();
 app.use(express.json());
 app.use(cors({ origin: env.corsOrigins, credentials: true }));
 
-// Org routes (placeholders)
-app.post("/org", (_req, res) => res.json({ ok: true }));
-app.get("/org/:tenantId", (_req, res) => res.json({ ok: true }));
-app.patch("/org/:tenantId", (_req, res) => res.json({ ok: true }));
+// Routes
+app.use("/org", orgRoutes);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 

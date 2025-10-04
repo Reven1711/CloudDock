@@ -18,13 +18,13 @@
     "dev:all": "concurrently -n gateway,auth,org,user,files,billing,ui -c blue,magenta,green,yellow,cyan,red,gray \"npm:dev:gateway\" \"npm:dev:auth\" \"npm:dev:org\" \"npm:dev:user\" \"npm:dev:files\" \"npm:dev:billing\" \"npm:dev:ui\""
   },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "concurrently": "^8.2.2",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
+    "dotenv": "^16.6.1",
     "express": "^4.19.2",
     "http-proxy": "^1.18.1",
-    "mongoose": "^8.5.1",
-    "concurrently": "^8.2.2"
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.5.1"
   }
 }
-
-

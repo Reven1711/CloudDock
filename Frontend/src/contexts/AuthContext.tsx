@@ -78,75 +78,97 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUsage(map[tenantId]);
   };
 
-  const signUpOrganization: AuthContextType['signUpOrganization'] = async ({ tenantId, companyName, adminName, adminEmail }) => {
-    // Mock: store tenant and set admin as logged in
-    const tenantsRaw = localStorage.getItem(STORAGE_KEYS.tenants);
-    const tenants = tenantsRaw ? (JSON.parse(tenantsRaw) as Record<string, { id: string; name: string }>) : {};
-    tenants[tenantId] = { id: tenantId, name: companyName };
-    localStorage.setItem(STORAGE_KEYS.tenants, JSON.stringify(tenants));
-
-    const newUser: AuthUser = {
-      id: `admin_${Date.now()}`,
-      name: adminName,
-      email: adminEmail,
-      role: 'admin',
-      tenantId,
-      approved: true,
-    };
-    persistUser(newUser);
-    ensureTenantUsage(tenantId);
-    return newUser;
-  };
-
-  const signIn: AuthContextType['signIn'] = async ({ mode, tenantId, email }) => {
-    // Mock sign-in behavior
-    ensureTenantUsage(tenantId);
-    if (mode === 'org') {
-      const adminUser: AuthUser = {
-        id: `admin_${tenantId}`,
-        name: 'Org Admin',
-        email,
+  const signUpOrganization: AuthContextType['signUpOrganization'] = async ({ tenantId, companyName, adminName, adminEmail, password }) => {
+    try {
+      const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
+      console.log('Attempting to connect to:', apiUrl);
+      
+      const response = await fetch(`${apiUrl}/auth/org/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgName: companyName, adminName, adminEmail, password }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Signup failed');
+      }
+      
+      const data = await response.json();
+      const newUser: AuthUser = {
+        id: data.user.userId,
+        name: data.user.name,
+        email: adminEmail,
         role: 'admin',
         tenantId,
         approved: true,
       };
-      persistUser(adminUser);
-      return adminUser;
+      persistUser(newUser);
+      ensureTenantUsage(tenantId);
+      return newUser;
+    } catch (error) {
+      throw error;
     }
-    // user mode: if pending exists, keep pending; else active user
-    const pendingRaw = localStorage.getItem(STORAGE_KEYS.pendingUsers);
-    const list = pendingRaw ? (JSON.parse(pendingRaw) as AuthUser[]) : [];
-    const found = list.find(u => u.tenantId === tenantId && u.email.toLowerCase() === email.toLowerCase());
-    const userToPersist: AuthUser = found ?? {
-      id: `user_${tenantId}_${Date.now()}`,
-      name: 'User',
-      email,
-      role: 'user',
-      tenantId,
-      approved: true,
-    };
-    persistUser(userToPersist);
-    return userToPersist;
   };
 
-  const signUpUser: AuthContextType['signUpUser'] = async ({ tenantId, name, email }) => {
-    // Mock: create pending user
-    const pendingRaw = localStorage.getItem(STORAGE_KEYS.pendingUsers);
-    const list = pendingRaw ? (JSON.parse(pendingRaw) as AuthUser[]) : [];
-    const newUser: AuthUser = {
-      id: `user_${Date.now()}`,
-      name,
-      email,
-      role: 'pending',
-      tenantId,
-      approved: false,
-    };
-    list.push(newUser);
-    localStorage.setItem(STORAGE_KEYS.pendingUsers, JSON.stringify(list));
-    // Log them in with pending state
-    persistUser(newUser);
-    ensureTenantUsage(tenantId);
-    return newUser;
+  const signIn: AuthContextType['signIn'] = async ({ mode, tenantId, email, password }) => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000'}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, orgId: tenantId }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Login failed');
+      }
+      
+      const data = await response.json();
+      const user: AuthUser = {
+        id: data.user.userId,
+        name: data.user.name,
+        email,
+        role: data.user.role,
+        tenantId,
+        approved: data.user.approved,
+      };
+      persistUser(user);
+      ensureTenantUsage(tenantId);
+      return user;
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const signUpUser: AuthContextType['signUpUser'] = async ({ tenantId, name, email, password }) => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000'}/auth/user/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgId: tenantId, name, email, password }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Signup failed');
+      }
+      
+      const data = await response.json();
+      const newUser: AuthUser = {
+        id: data.user.userId,
+        name: data.user.name,
+        email,
+        role: 'pending',
+        tenantId,
+        approved: false,
+      };
+      persistUser(newUser);
+      ensureTenantUsage(tenantId);
+      return newUser;
+    } catch (error) {
+      throw error;
+    }
   };
 
   const approveUser: AuthContextType['approveUser'] = async (userId) => {

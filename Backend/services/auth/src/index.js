@@ -3,6 +3,7 @@ import cors from "cors";
 import { connectMongo } from "../../../src/db/connection.js";
 import { ensureCollections } from "../../../src/db/ensure.js";
 import { env } from "../../../src/config/env.js";
+import authRoutes from "./routes/authRoutes.js";
 
 const PORT = Number(process.env.AUTH_SERVICE_PORT || 4001);
 
@@ -10,10 +11,8 @@ const app = express();
 app.use(express.json());
 app.use(cors({ origin: env.corsOrigins, credentials: true }));
 
-// Routes (placeholders)
-app.post("/auth/org/signup", (_req, res) => res.json({ ok: true }));
-app.post("/auth/user/signup", (_req, res) => res.json({ ok: true }));
-app.post("/auth/login", (_req, res) => res.json({ ok: true, token: "mock" }));
+// Routes
+app.use("/auth", authRoutes);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
