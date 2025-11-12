@@ -9,7 +9,8 @@ const PORT = Number(process.env.ORG_SERVICE_PORT || 4002);
 
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: env.corsOrigins, credentials: true }));
+// CORS is handled by the gateway, not needed here
+// app.use(cors({ origin: env.corsOrigins, credentials: true }));
 
 // Routes
 app.use("/org", orgRoutes);

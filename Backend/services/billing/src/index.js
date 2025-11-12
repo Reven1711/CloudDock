@@ -8,7 +8,8 @@ const PORT = Number(process.env.BILLING_SERVICE_PORT || 4005);
 
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: env.corsOrigins, credentials: true }));
+// CORS is handled by the gateway, not needed here
+// app.use(cors({ origin: env.corsOrigins, credentials: true }));
 
 // Billing routes (placeholders)
 app.get("/billing/usage/:tenantId", (_req, res) => res.json({ ok: true }));

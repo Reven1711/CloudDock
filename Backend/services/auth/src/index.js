@@ -9,7 +9,8 @@ const PORT = Number(process.env.AUTH_SERVICE_PORT || 4001);
 
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: env.corsOrigins, credentials: true }));
+// CORS is handled by the gateway, not needed here
+// app.use(cors({ origin: env.corsOrigins, credentials: true }));
 
 // Routes
 app.use("/auth", authRoutes);

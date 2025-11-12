@@ -40,7 +40,12 @@ const Auth = () => {
         const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000'}/org`);
         if (response.ok) {
           const data = await response.json();
-          setTenants(data.organizations || []);
+          // Map backend response { orgId, orgName } to frontend format { id, name }
+          const mappedOrgs = (data.organizations || []).map((org: any) => ({
+            id: org.orgId || org.id,
+            name: org.orgName || org.name
+          }));
+          setTenants(mappedOrgs);
         }
       } catch (error) {
         console.error('Failed to fetch organizations:', error);
@@ -195,6 +200,28 @@ const Auth = () => {
                 />
               </div>
             )}
+
+            {isLogin && signinMode === 'user' && (
+              <div className="space-y-2">
+                <Label htmlFor="tenant" className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
+                  Select Organization
+                </Label>
+                <Select value={selectedTenant} onValueChange={setSelectedTenant}>
+                  <SelectTrigger className="glass-card border-primary/20">
+                    <SelectValue placeholder="Choose your organization" />
+                  </SelectTrigger>
+                  <SelectContent className="glass-card">
+                    {tenants.map((tenant) => (
+                      <SelectItem key={tenant.id} value={tenant.id}>
+                        {tenant.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {!isLogin && (
               <div className="space-y-2">
                 <Label htmlFor="name" className="flex items-center gap-2">

@@ -3,16 +3,17 @@ import cors from "cors";
 import { connectMongo } from "../../../src/db/connection.js";
 import { ensureCollections } from "../../../src/db/ensure.js";
 import { env } from "../../../src/config/env.js";
+import uiRoutes from "./routes/uiRoutes.js";
 
 const PORT = Number(process.env.UI_SERVICE_PORT || 4006);
 
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: env.corsOrigins, credentials: true }));
+// CORS is handled by the gateway, not needed here
+// app.use(cors({ origin: env.corsOrigins, credentials: true }));
 
-// UI customization routes (placeholders)
-app.get("/ui/:tenantId", (_req, res) => res.json({ ok: true }));
-app.patch("/ui/:tenantId", (_req, res) => res.json({ ok: true }));
+// UI customization routes
+app.use("/ui", uiRoutes);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 

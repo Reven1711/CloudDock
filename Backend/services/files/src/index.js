@@ -8,7 +8,8 @@ const PORT = Number(process.env.FILE_SERVICE_PORT || 4004);
 
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: env.corsOrigins, credentials: true }));
+// CORS is handled by the gateway, not needed here
+// app.use(cors({ origin: env.corsOrigins, credentials: true }));
 
 // File routes (placeholders)
 app.post("/files/upload", (_req, res) => res.json({ ok: true }));

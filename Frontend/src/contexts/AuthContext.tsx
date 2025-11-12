@@ -188,10 +188,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const signOut = () => {
+    persistUser(null);
+    // Redirect to home page after logout
+    window.location.href = '/';
+  };
+
   const value = useMemo<AuthContextType>(() => ({
     user,
     usage,
-    signOut: () => persistUser(null),
+    signOut,
     signIn,
     signUpOrganization,
     signUpUser,

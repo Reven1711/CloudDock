@@ -22,6 +22,7 @@ export interface TenantConfig {
     cardStyle: 'glassmorphism' | 'neumorphism';
     showAnalytics: boolean;
     showRecentFiles: boolean;
+    fileViewLayout: 'large-icons' | 'list' | 'details' | 'tiles';
   };
   features: {
     darkModeEnabled: boolean;
@@ -52,6 +53,7 @@ const defaultTenant: TenantConfig = {
     cardStyle: 'glassmorphism',
     showAnalytics: true,
     showRecentFiles: true,
+    fileViewLayout: 'large-icons',
   },
   features: {
     darkModeEnabled: true,
@@ -82,6 +84,7 @@ const blueOceanTenant: TenantConfig = {
     cardStyle: 'glassmorphism',
     showAnalytics: true,
     showRecentFiles: false,
+    fileViewLayout: 'tiles',
   },
   features: {
     darkModeEnabled: false,
@@ -112,6 +115,7 @@ const noirTenant: TenantConfig = {
     cardStyle: 'neumorphism',
     showAnalytics: true,
     showRecentFiles: true,
+    fileViewLayout: 'list',
   },
   features: {
     darkModeEnabled: true,
