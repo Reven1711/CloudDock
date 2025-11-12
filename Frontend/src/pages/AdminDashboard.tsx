@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 // Removed Sidebar and Header - using custom organization header
 import { FileCard } from '@/components/dashboard/FileCard';
-import { Users, HardDrive, Settings, Eye, Palette, Layout, CheckCircle, XCircle, Clock, LogOut } from 'lucide-react';
+import { Users, HardDrive, Settings, Eye, Palette, Layout, CheckCircle, XCircle, Clock, LogOut, Download, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -14,6 +14,17 @@ import { Switch } from '@/components/ui/switch';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
+import {
+  getOrganizationFiles,
+  getStorageInfo,
+  getFileDownloadUrl,
+  deleteFile,
+  formatFileSize,
+  getFileIcon,
+  formatRelativeTime,
+  FileMetadata,
+  StorageInfo,
+} from '@/services/fileService';
 
 const AdminDashboard = () => {
   const { user } = useAuth();
@@ -29,13 +40,7 @@ const AdminDashboard = () => {
   }, [user, navigate]);
 
   // Organization stats
-  const [orgStats, setOrgStats] = useState({
-    totalUsers: 0,
-    pendingUsers: 0,
-    totalFiles: 0,
-    storageUsed: 0,
-    storageQuota: 50 * 1024 * 1024 * 1024, // 50 GB in bytes
-  });
+  const [storageData, setStorageData] = useState<StorageInfo | null>(null);
 
   // UI Customization state
   const [uiSettings, setUiSettings] = useState({
@@ -50,56 +55,56 @@ const AdminDashboard = () => {
     fileViewLayout: tenant.dashboard.fileViewLayout || 'large-icons' as 'large-icons' | 'list' | 'details' | 'tiles',
   });
 
-  // Mock all files from organization
-  const [allFiles, setAllFiles] = useState([
-    { id: 1, name: 'Q4 Report.pdf', size: '2.4 MB', date: 'Today', type: 'document' as const, owner: 'john@acme.com' },
-    { id: 2, name: 'Team Presentation', size: '45 MB', date: 'Yesterday', type: 'folder' as const, owner: 'jane@acme.com' },
-    { id: 3, name: 'Product Demo.mp4', size: '124 MB', date: '2 days ago', type: 'video' as const, owner: 'bob@acme.com' },
-    { id: 4, name: 'Client Proposal.docx', size: '856 KB', date: 'Last week', type: 'document' as const, owner: 'alice@acme.com' },
-  ]);
+  // Files state
+  const [allFiles, setAllFiles] = useState<FileMetadata[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(true);
 
   // Users state
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
 
   useEffect(() => {
+    if (!user?.tenantId) return;
+    
     // Fetch organization-wide data
     fetchOrgStats();
     fetchAllOrgFiles();
     fetchUISettings();
     fetchAllUsers();
-  }, [user]);
+  }, [user?.tenantId]);
 
   const fetchOrgStats = async () => {
+    if (!user?.tenantId) return;
+    
     try {
-      const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
-      // TODO: Replace with actual API call
-      // const response = await fetch(`${apiUrl}/org/${user?.tenantId}/stats`);
-      // const data = await response.json();
-      // setOrgStats(data);
-      
-      // Mock data for now
-      setOrgStats({
-        totalUsers: 12,
-        pendingUsers: 3,
-        totalFiles: 234,
-        storageUsed: 24.5 * 1024 * 1024 * 1024, // 24.5 GB
-        storageQuota: 50 * 1024 * 1024 * 1024, // 50 GB
-      });
+      const storage = await getStorageInfo(user.tenantId);
+      setStorageData(storage);
     } catch (error) {
       console.error('Failed to fetch org stats:', error);
+      toast({
+        title: "Failed to load storage data",
+        description: "Could not retrieve storage information.",
+        variant: "destructive",
+      });
     }
   };
 
   const fetchAllOrgFiles = async () => {
+    if (!user?.tenantId) return;
+    
     try {
-      const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
-      // TODO: Replace with actual API call
-      // const response = await fetch(`${apiUrl}/files/org/${user?.tenantId}`);
-      // const data = await response.json();
-      // setAllFiles(data.files);
+      setLoadingFiles(true);
+      const response = await getOrganizationFiles(user.tenantId, '/', 1, 100);
+      setAllFiles(response.files);
     } catch (error) {
       console.error('Failed to fetch org files:', error);
+      toast({
+        title: "Failed to load files",
+        description: "Could not retrieve organization files.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingFiles(false);
     }
   };
 
@@ -138,14 +143,7 @@ const AdminDashboard = () => {
         console.log('Users data received:', data);
         setAllUsers(data.users || []);
         
-        // Update org stats with real user counts
-        const pendingCount = (data.users || []).filter((u: any) => u.status === 'pending').length;
-        setOrgStats((prev) => ({
-          ...prev,
-          totalUsers: (data.users || []).length,
-          pendingUsers: pendingCount,
-        }));
-        
+        // Show success toast
         toast({
           title: "Users Loaded",
           description: `Found ${(data.users || []).length} users in your organization`,
@@ -289,8 +287,20 @@ const AdminDashboard = () => {
     }
   };
 
-  const storagePercentage = (orgStats.storageUsed / orgStats.storageQuota) * 100;
-  const storageFree = orgStats.storageQuota - orgStats.storageUsed;
+  const storagePercentage = storageData ? storageData.usagePercentage : 0;
+  const storageFree = storageData ? storageData.availableStorage : 0;
+
+  // Show loading if user data not yet available
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-secondary/10">
@@ -366,10 +376,10 @@ const AdminDashboard = () => {
                   </CardHeader>
                   <CardContent>
                     <div className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                      {orgStats.totalUsers}
+                      {allUsers.length}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {orgStats.pendingUsers} pending approval
+                      {allUsers.filter(u => u.status === 'pending').length} pending approval
                     </p>
                   </CardContent>
                 </Card>
@@ -380,7 +390,7 @@ const AdminDashboard = () => {
                   </CardHeader>
                   <CardContent>
                     <div className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                      {orgStats.totalFiles}
+                      {storageData?.fileCount || 0}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
                       Across all users
@@ -394,10 +404,10 @@ const AdminDashboard = () => {
                   </CardHeader>
                   <CardContent>
                     <div className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                      {(orgStats.storageUsed / (1024 * 1024 * 1024)).toFixed(1)} GB
+                      {storageData ? formatFileSize(storageData.usedStorage) : '0 B'}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      of {(orgStats.storageQuota / (1024 * 1024 * 1024)).toFixed(0)} GB
+                      of {storageData ? formatFileSize(storageData.totalQuota) : '0 B'}
                     </p>
                   </CardContent>
                 </Card>
@@ -428,8 +438,8 @@ const AdminDashboard = () => {
                 <CardContent>
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span>{(orgStats.storageUsed / (1024 * 1024 * 1024)).toFixed(2)} GB used</span>
-                      <span>{(orgStats.storageQuota / (1024 * 1024 * 1024)).toFixed(0)} GB total</span>
+                      <span>{storageData ? formatFileSize(storageData.usedStorage) : '0 B'} used</span>
+                      <span>{storageData ? formatFileSize(storageData.totalQuota) : '0 B'} total</span>
                     </div>
                     <div className="w-full bg-muted rounded-full h-4 overflow-hidden">
                       <div
@@ -488,86 +498,145 @@ const AdminDashboard = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {/* Large Icons View */}
-                  {tenant.dashboard.fileViewLayout === 'large-icons' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {allFiles.map((file) => (
-                        <div key={file.id} className="glass-card border-primary/20 p-6 rounded-lg hover:scale-105 transition-transform">
-                          <div className="flex flex-col items-center text-center space-y-3">
-                            <div className="text-6xl">{file.type === 'folder' ? '📁' : file.type === 'image' ? '🖼️' : '📄'}</div>
-                            <div className="w-full">
-                              <h4 className="font-semibold truncate">{file.name}</h4>
-                              <p className="text-sm text-muted-foreground">{file.size}</p>
-                              <p className="text-xs text-muted-foreground">{file.date}</p>
-                              <p className="text-xs text-primary mt-2">Owner: {file.owner}</p>
+                  {loadingFiles ? (
+                    <div className="text-center py-12">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+                      <p className="mt-4 text-muted-foreground">Loading files...</p>
+                    </div>
+                  ) : allFiles.length === 0 ? (
+                    <div className="text-center py-12 glass-card rounded-lg border-primary/20">
+                      <p className="text-muted-foreground">No files uploaded yet by any users.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Large Icons View */}
+                      {tenant.dashboard.fileViewLayout === 'large-icons' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {allFiles.map((file) => (
+                            <div key={file.fileId} className="glass-card border-primary/20 p-6 rounded-lg hover:scale-105 transition-transform group">
+                              <div className="flex flex-col items-center text-center space-y-3">
+                                <div className="text-6xl">{getFileIcon(file.mimeType)}</div>
+                                <div className="w-full">
+                                  <h4 className="font-semibold truncate">{file.originalName}</h4>
+                                  <p className="text-sm text-muted-foreground">{formatFileSize(file.size)}</p>
+                                  <p className="text-xs text-muted-foreground">{formatRelativeTime(file.uploadedAt)}</p>
+                                  <p className="text-xs text-primary mt-2">Owner: {file.uploadedBy.userName}</p>
+                                  {file.virusScanStatus === 'scanning' && (
+                                    <p className="text-xs text-yellow-500 mt-1">🔍 Scanning...</p>
+                                  )}
+                                  {file.virusScanStatus === 'infected' && (
+                                    <p className="text-xs text-red-500 mt-1">⚠️ Infected</p>
+                                  )}
+                                </div>
+                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Button size="sm" variant="outline">
+                                    <Download className="w-3 h-3" />
+                                  </Button>
+                                  <Button size="sm" variant="outline">
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* List View */}
-                  {tenant.dashboard.fileViewLayout === 'list' && (
-                    <div className="space-y-2">
-                      {allFiles.map((file) => (
-                        <div key={file.id} className="glass-card border-primary/20 p-3 rounded-lg flex items-center gap-4 hover:bg-primary/5 transition-colors">
-                          <div className="text-2xl">{file.type === 'folder' ? '📁' : file.type === 'image' ? '🖼️' : '📄'}</div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-medium truncate">{file.name}</h4>
-                          </div>
-                          <div className="text-sm text-muted-foreground">{file.size}</div>
-                          <div className="text-sm text-muted-foreground w-24">{file.date}</div>
-                          <div className="text-xs text-primary w-32 truncate">{file.owner}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Details View */}
-                  {tenant.dashboard.fileViewLayout === 'details' && (
-                    <div className="glass-card border-primary/20 rounded-lg overflow-hidden">
-                      <table className="w-full">
-                        <thead className="bg-primary/10 border-b border-primary/20">
-                          <tr>
-                            <th className="text-left p-3 font-semibold">Name</th>
-                            <th className="text-left p-3 font-semibold">Type</th>
-                            <th className="text-left p-3 font-semibold">Size</th>
-                            <th className="text-left p-3 font-semibold">Date</th>
-                            <th className="text-left p-3 font-semibold">Owner</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {allFiles.map((file, index) => (
-                            <tr key={file.id} className={`border-b border-primary/10 hover:bg-primary/5 transition-colors ${index % 2 === 0 ? 'bg-background/50' : ''}`}>
-                              <td className="p-3 flex items-center gap-3">
-                                <span className="text-xl">{file.type === 'folder' ? '📁' : file.type === 'image' ? '🖼️' : '📄'}</span>
-                                <span className="font-medium">{file.name}</span>
-                              </td>
-                              <td className="p-3 text-sm text-muted-foreground capitalize">{file.type}</td>
-                              <td className="p-3 text-sm text-muted-foreground">{file.size}</td>
-                              <td className="p-3 text-sm text-muted-foreground">{file.date}</td>
-                              <td className="p-3 text-sm text-primary">{file.owner}</td>
-                            </tr>
                           ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {/* Tiles View */}
-                  {tenant.dashboard.fileViewLayout === 'tiles' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                      {allFiles.map((file) => (
-                        <div key={file.id} className="glass-card border-primary/20 p-4 rounded-lg hover:shadow-lg transition-shadow">
-                          <div className="text-4xl mb-3">{file.type === 'folder' ? '📁' : file.type === 'image' ? '🖼️' : '📄'}</div>
-                          <h4 className="font-semibold text-sm truncate mb-1">{file.name}</h4>
-                          <p className="text-xs text-muted-foreground">{file.size}</p>
-                          <p className="text-xs text-muted-foreground">{file.date}</p>
-                          <p className="text-xs text-primary mt-2 truncate">By: {file.owner}</p>
                         </div>
-                      ))}
-                    </div>
+                      )}
+
+                      {/* List View */}
+                      {tenant.dashboard.fileViewLayout === 'list' && (
+                        <div className="space-y-2">
+                          {allFiles.map((file) => (
+                            <div key={file.fileId} className="glass-card border-primary/20 p-3 rounded-lg flex items-center gap-4 hover:bg-primary/5 transition-colors group">
+                              <div className="text-2xl">{getFileIcon(file.mimeType)}</div>
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-medium truncate">{file.originalName}</h4>
+                              </div>
+                              <div className="text-sm text-muted-foreground">{formatFileSize(file.size)}</div>
+                              <div className="text-sm text-muted-foreground w-24">{formatRelativeTime(file.uploadedAt)}</div>
+                              <div className="text-xs text-primary w-32 truncate">{file.uploadedBy.userName}</div>
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button size="sm" variant="ghost">
+                                  <Download className="w-3 h-3" />
+                                </Button>
+                                <Button size="sm" variant="ghost">
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Details View */}
+                      {tenant.dashboard.fileViewLayout === 'details' && (
+                        <div className="glass-card border-primary/20 rounded-lg overflow-hidden">
+                          <table className="w-full">
+                            <thead className="bg-primary/10 border-b border-primary/20">
+                              <tr>
+                                <th className="text-left p-3 font-semibold">Name</th>
+                                <th className="text-left p-3 font-semibold">Size</th>
+                                <th className="text-left p-3 font-semibold">Date</th>
+                                <th className="text-left p-3 font-semibold">Owner</th>
+                                <th className="text-left p-3 font-semibold">Status</th>
+                                <th className="text-left p-3 font-semibold">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {allFiles.map((file, index) => (
+                                <tr key={file.fileId} className={`border-b border-primary/10 hover:bg-primary/5 transition-colors ${index % 2 === 0 ? 'bg-background/50' : ''}`}>
+                                  <td className="p-3 flex items-center gap-3">
+                                    <span className="text-xl">{getFileIcon(file.mimeType)}</span>
+                                    <span className="font-medium">{file.originalName}</span>
+                                  </td>
+                                  <td className="p-3 text-sm text-muted-foreground">{formatFileSize(file.size)}</td>
+                                  <td className="p-3 text-sm text-muted-foreground">{formatRelativeTime(file.uploadedAt)}</td>
+                                  <td className="p-3 text-sm text-primary">{file.uploadedBy.userName}</td>
+                                  <td className="p-3">
+                                    {file.virusScanStatus === 'clean' && <span className="text-green-500 text-xs">✓ Clean</span>}
+                                    {file.virusScanStatus === 'scanning' && <span className="text-yellow-500 text-xs">🔍 Scanning</span>}
+                                    {file.virusScanStatus === 'infected' && <span className="text-red-500 text-xs">⚠️ Infected</span>}
+                                    {file.virusScanStatus === 'pending' && <span className="text-gray-500 text-xs">⏳ Pending</span>}
+                                  </td>
+                                  <td className="p-3">
+                                    <div className="flex gap-1">
+                                      <Button size="sm" variant="ghost">
+                                        <Download className="w-3 h-3" />
+                                      </Button>
+                                      <Button size="sm" variant="ghost">
+                                        <Trash2 className="w-3 h-3" />
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {/* Tiles View */}
+                      {tenant.dashboard.fileViewLayout === 'tiles' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                          {allFiles.map((file) => (
+                            <div key={file.fileId} className="glass-card border-primary/20 p-4 rounded-lg hover:shadow-lg transition-shadow group">
+                              <div className="text-4xl mb-3">{getFileIcon(file.mimeType)}</div>
+                              <h4 className="font-semibold text-sm truncate mb-1">{file.originalName}</h4>
+                              <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+                              <p className="text-xs text-muted-foreground">{formatRelativeTime(file.uploadedAt)}</p>
+                              <p className="text-xs text-primary mt-2 truncate">By: {file.uploadedBy.userName}</p>
+                              <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button size="sm" variant="ghost">
+                                  <Download className="w-3 h-3" />
+                                </Button>
+                                <Button size="sm" variant="ghost">
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
                   )}
                 </CardContent>
               </Card>
@@ -1023,7 +1092,7 @@ const AdminDashboard = () => {
                         cardStyle: 'glassmorphism',
                         showAnalytics: true,
                         showRecentFiles: true,
-                        fileViewDefault: 'grid',
+                        fileViewLayout: 'large-icons',
                       })}
                     >
                       Reset to Default

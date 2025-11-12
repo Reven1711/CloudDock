@@ -18,7 +18,7 @@ export const getUISettings = async (req, res) => {
         cardStyle: "glassmorphism",
         showAnalytics: true,
         showRecentFiles: true,
-        fileViewDefault: "grid",
+        fileViewLayout: "large-icons",
       });
       await settings.save();
     }
@@ -34,7 +34,7 @@ export const getUISettings = async (req, res) => {
         cardStyle: settings.cardStyle,
         showAnalytics: settings.showAnalytics,
         showRecentFiles: settings.showRecentFiles,
-        fileViewDefault: settings.fileViewDefault,
+        fileViewLayout: settings.fileViewLayout,
         logoUrl: settings.logoUrl,
       },
     });
@@ -72,8 +72,8 @@ export const updateUISettings = async (req, res) => {
       uiSettings.showAnalytics = settings.showAnalytics;
     if (settings.showRecentFiles !== undefined)
       uiSettings.showRecentFiles = settings.showRecentFiles;
-    if (settings.fileViewDefault)
-      uiSettings.fileViewDefault = settings.fileViewDefault;
+    if (settings.fileViewLayout)
+      uiSettings.fileViewLayout = settings.fileViewLayout;
 
     await uiSettings.save();
 
@@ -89,7 +89,7 @@ export const updateUISettings = async (req, res) => {
         cardStyle: uiSettings.cardStyle,
         showAnalytics: uiSettings.showAnalytics,
         showRecentFiles: uiSettings.showRecentFiles,
-        fileViewDefault: uiSettings.fileViewDefault,
+        fileViewLayout: uiSettings.fileViewLayout,
         logoUrl: uiSettings.logoUrl,
       },
     });
