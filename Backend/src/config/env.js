@@ -15,7 +15,7 @@ if (result.error) {
   console.log("Dotenv error:", result.error);
 }
 
-// Set environment variables directly if not loaded
+// Set environment variables directly if not loaded (for development only)
 if (!process.env.MONGODB_URI) {
   process.env.MONGODB_URI =
     "mongodb+srv://cloudproject:jinil1711@cluster0.b3qxdyt.mongodb.net/CloudDock?retryWrites=true&w=majority";
@@ -25,7 +25,21 @@ if (!process.env.MONGODB_URI) {
   process.env.PORT = "4000";
   process.env.CORS_ORIGINS =
     "http://localhost:5173,http://localhost:3000,http://localhost:4173,http://localhost:8080";
+  process.env.FRONTEND_URL = "http://localhost:8080";
   console.log("Set environment variables directly");
+}
+
+// Stripe keys should ONLY be loaded from .env file (never hardcoded)
+if (!process.env.STRIPE_SECRET_KEY) {
+  console.warn("⚠️  WARNING: STRIPE_SECRET_KEY not found in .env file");
+  console.warn(
+    "   Add STRIPE_SECRET_KEY=sk_test_... to your Backend/.env file"
+  );
+}
+if (!process.env.STRIPE_WEBHOOK_SECRET) {
+  console.warn(
+    "⚠️  WARNING: STRIPE_WEBHOOK_SECRET not found in .env file (optional for development)"
+  );
 }
 
 console.log("MONGODB_URI:", process.env.MONGODB_URI);

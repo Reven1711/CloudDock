@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import AdminDashboard from "./pages/AdminDashboard";
+import PaymentSuccess from "./pages/PaymentSuccess";
 import NotFound from "./pages/NotFound";
 import Onboarding from "./pages/Onboarding";
 import Admin from "./pages/Admin";
@@ -31,6 +32,7 @@ const App = () => (
               <Route path="/onboarding" element={<Onboarding />} />
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
               <Route path="/admin" element={<Admin />} />
+              <Route path="/payment/success" element={<PaymentSuccess />} />
               <Route path="/dashboard/*" element={<Dashboard />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

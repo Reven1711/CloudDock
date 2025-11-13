@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 // Removed Sidebar and Header - using custom organization header
 import { FileCard } from '@/components/dashboard/FileCard';
-import { Users, HardDrive, Settings, Eye, Palette, Layout, CheckCircle, XCircle, Clock, LogOut, Download, Trash2 } from 'lucide-react';
+import { StorageUpgradeDialog } from '@/components/StorageUpgradeDialog';
+import { Users, HardDrive, Settings, Eye, Palette, Layout, CheckCircle, XCircle, Clock, LogOut, Download, Trash2, ArrowUpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -25,6 +26,7 @@ import {
   FileMetadata,
   StorageInfo,
 } from '@/services/fileService';
+import { getStoragePurchaseHistory } from '@/services/billingService';
 
 const AdminDashboard = () => {
   const { user } = useAuth();
@@ -63,6 +65,12 @@ const AdminDashboard = () => {
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
 
+  // Storage upgrade dialog state
+  const [storageUpgradeOpen, setStorageUpgradeOpen] = useState(false);
+  
+  // Purchase history state
+  const [latestPurchase, setLatestPurchase] = useState<any>(null);
+
   useEffect(() => {
     if (!user?.tenantId) return;
     
@@ -71,13 +79,19 @@ const AdminDashboard = () => {
     fetchAllOrgFiles();
     fetchUISettings();
     fetchAllUsers();
+    fetchLatestPurchase();
   }, [user?.tenantId]);
 
   const fetchOrgStats = async () => {
     if (!user?.tenantId) return;
     
     try {
+      console.log('🔄 Fetching storage info for orgId:', user.tenantId);
       const storage = await getStorageInfo(user.tenantId);
+      console.log('📊 Storage info received:', storage);
+      console.log('   - Total Quota (bytes):', storage.totalQuota);
+      console.log('   - Total Quota (GB):', (storage.totalQuota / (1024 * 1024 * 1024)).toFixed(2));
+      console.log('   - Used Storage:', storage.usedStorage);
       setStorageData(storage);
     } catch (error) {
       console.error('Failed to fetch org stats:', error);
@@ -86,6 +100,21 @@ const AdminDashboard = () => {
         description: "Could not retrieve storage information.",
         variant: "destructive",
       });
+    }
+  };
+
+  const fetchLatestPurchase = async () => {
+    if (!user?.tenantId) return;
+    
+    try {
+      const response = await getStoragePurchaseHistory(user.tenantId);
+      if (response.success && response.purchases && response.purchases.length > 0) {
+        // Get the most recent completed purchase
+        const completed = response.purchases.find((p: any) => p.status === 'completed');
+        setLatestPurchase(completed || null);
+      }
+    } catch (error) {
+      console.error('Failed to fetch purchase history:', error);
     }
   };
 
@@ -436,22 +465,47 @@ const AdminDashboard = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>{storageData ? formatFileSize(storageData.usedStorage) : '0 B'} used</span>
-                      <span>{storageData ? formatFileSize(storageData.totalQuota) : '0 B'} total</span>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span>{storageData ? formatFileSize(storageData.usedStorage) : '0 B'} used</span>
+                        <span className="font-semibold">{storageData ? formatFileSize(storageData.totalQuota) : '0 B'} total</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-4 overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-primary transition-all duration-500"
+                          style={{ width: `${Math.min(storagePercentage, 100)}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between items-start text-xs text-muted-foreground">
+                        <div>
+                          {storagePercentage > 90 && '⚠️ Storage almost full! '}
+                          {storagePercentage > 80 && storagePercentage <= 90 && '⚠️ Storage getting full. '}
+                          {storagePercentage < 80 && `${(100 - storagePercentage).toFixed(0)}% available`}
+                        </div>
+                        {latestPurchase && latestPurchase.expiresAt && (
+                          <div className="text-right">
+                            <div className="font-medium text-primary">
+                              +{latestPurchase.storageGB} GB purchased
+                            </div>
+                            <div className="text-xs">
+                              Expires: {new Date(latestPurchase.expiresAt).toLocaleDateString()}
+                              <span className="block">
+                                ({Math.ceil((new Date(latestPurchase.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))} days left)
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div className="w-full bg-muted rounded-full h-4 overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-primary transition-all duration-500"
-                        style={{ width: `${Math.min(storagePercentage, 100)}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {storagePercentage > 90 && '⚠️ Storage almost full! '}
-                      {storagePercentage > 80 && storagePercentage <= 90 && '⚠️ Storage getting full. '}
-                      Free tier includes 50 GB per organization.
-                    </p>
+                    <Button
+                      onClick={() => setStorageUpgradeOpen(true)}
+                      className="w-full gap-2"
+                      variant="default"
+                    >
+                      <ArrowUpCircle className="w-4 h-4" />
+                      Upgrade Storage
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -1103,6 +1157,18 @@ const AdminDashboard = () => {
             </TabsContent>
           </Tabs>
       </main>
+
+      {/* Storage Upgrade Dialog */}
+      <StorageUpgradeDialog
+        isOpen={storageUpgradeOpen}
+        onClose={() => {
+          setStorageUpgradeOpen(false);
+          // Refresh storage data after dialog closes
+          fetchOrgStats();
+        }}
+        orgId={user?.tenantId || ''}
+        currentQuota={storageData?.totalQuota ? storageData.totalQuota / (1024 * 1024 * 1024) : 50}
+      />
     </div>
   );
 };
