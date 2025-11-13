@@ -1,0 +1,172 @@
+services:
+  # MongoDB Database (COMMENTED OUT - Using MongoDB Atlas instead)
+  # mongodb:
+  #   image: mongo:7
+  #   container_name: clouddock-mongodb
+  #   restart: unless-stopped
+  #   environment:
+  #     MONGO_INITDB_ROOT_USERNAME: clouddock
+  #     MONGO_INITDB_ROOT_PASSWORD: clouddock_password_change_me
+  #     MONGO_INITDB_DATABASE: CloudDock
+  #   ports:
+  #     - "27017:27017"
+  #   volumes:
+  #     - mongodb_data:/data/db
+  #   networks:
+  #     - clouddock-network
+
+  # API Gateway
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: clouddock-gateway
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=${PORT:-4000}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - AUTH_SERVICE_URL=${AUTH_SERVICE_URL:-http://auth-service:4001}
+      - ORG_SERVICE_URL=${ORG_SERVICE_URL:-http://org-service:4002}
+      - USER_SERVICE_URL=${USER_SERVICE_URL:-http://user-service:4003}
+      - FILE_SERVICE_URL=${FILE_SERVICE_URL:-http://files-service:4004}
+      - BILLING_SERVICE_URL=${BILLING_SERVICE_URL:-http://billing-service:4005}
+      - UI_SERVICE_URL=${UI_SERVICE_URL:-http://ui-service:4006}
+    depends_on:
+      - auth-service
+      - org-service
+      - user-service
+      - files-service
+      - billing-service
+      - ui-service
+    networks:
+      - clouddock-network
+
+  # Auth Service
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: clouddock-auth-service
+    restart: unless-stopped
+    ports:
+      - "4001:4001"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - AUTH_SERVICE_PORT=${AUTH_SERVICE_PORT:-4001}
+      - MONGODB_URI=${MONGODB_URI}
+      - MONGODB_DB_NAME=${MONGODB_DB_NAME}
+      - JWT_SECRET=${JWT_SECRET}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    networks:
+      - clouddock-network
+
+  # Org Service
+  org-service:
+    build:
+      context: ./org-service
+      dockerfile: Dockerfile
+    container_name: clouddock-org-service
+    restart: unless-stopped
+    ports:
+      - "4002:4002"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - ORG_SERVICE_PORT=${ORG_SERVICE_PORT:-4002}
+      - MONGODB_URI=${MONGODB_URI}
+      - MONGODB_DB_NAME=${MONGODB_DB_NAME}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    networks:
+      - clouddock-network
+
+  # User Service
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    container_name: clouddock-user-service
+    restart: unless-stopped
+    ports:
+      - "4003:4003"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - USER_SERVICE_PORT=${USER_SERVICE_PORT:-4003}
+      - MONGODB_URI=${MONGODB_URI}
+      - MONGODB_DB_NAME=${MONGODB_DB_NAME}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    networks:
+      - clouddock-network
+
+  # Files Service
+  files-service:
+    build:
+      context: ./files-service
+      dockerfile: Dockerfile
+    container_name: clouddock-files-service
+    restart: unless-stopped
+    ports:
+      - "4004:4004"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - FILE_SERVICE_PORT=${FILE_SERVICE_PORT:-4004}
+      - MONGODB_URI=${MONGODB_URI}
+      - MONGODB_DB_NAME=${MONGODB_DB_NAME}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - ENABLE_VIRUS_SCAN=${ENABLE_VIRUS_SCAN:-false}
+      - VIRUS_SCAN_LAMBDA=${VIRUS_SCAN_LAMBDA}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    networks:
+      - clouddock-network
+
+  # Billing Service
+  billing-service:
+    build:
+      context: ./billing-service
+      dockerfile: Dockerfile
+    container_name: clouddock-billing-service
+    restart: unless-stopped
+    ports:
+      - "4005:4005"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - BILLING_SERVICE_PORT=${BILLING_SERVICE_PORT:-4005}
+      - MONGODB_URI=${MONGODB_URI}
+      - MONGODB_DB_NAME=${MONGODB_DB_NAME}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    networks:
+      - clouddock-network
+
+  # UI Service
+  ui-service:
+    build:
+      context: ./ui-service
+      dockerfile: Dockerfile
+    container_name: clouddock-ui-service
+    restart: unless-stopped
+    ports:
+      - "4006:4006"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - UI_SERVICE_PORT=${UI_SERVICE_PORT:-4006}
+      - MONGODB_URI=${MONGODB_URI}
+      - MONGODB_DB_NAME=${MONGODB_DB_NAME}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    networks:
+      - clouddock-network
+
+networks:
+  clouddock-network:
+    driver: bridge
+
+# volumes:
+  # mongodb_data:
+  #   driver: local
+

@@ -54,10 +54,21 @@ export const StorageUpgradeDialog = ({
   };
 
   const handleCheckout = async () => {
+    const MINIMUM_STORAGE_GB = 3;
+    
     if (storageAmount <= 0) {
       toast({
         title: 'Invalid storage amount',
         description: 'Please select or enter a valid storage amount',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (storageAmount < MINIMUM_STORAGE_GB) {
+      toast({
+        title: 'Storage amount too small',
+        description: `Minimum storage purchase is ${MINIMUM_STORAGE_GB} GB`,
         variant: 'destructive',
       });
       return;
@@ -95,6 +106,8 @@ export const StorageUpgradeDialog = ({
           </DialogTitle>
           <DialogDescription>
             Add more storage to your organization. Storage is billed monthly at $0.20 per GB.
+            <br />
+            <span className="text-xs text-muted-foreground">Minimum purchase: 3 GB ($0.60)</span>
           </DialogDescription>
         </DialogHeader>
 

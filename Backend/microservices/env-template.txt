@@ -1,0 +1,23 @@
+# CloudDock Microservices Environment Variables
+# Copy this file to .env and fill in your actual values
+
+# JWT Configuration
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+
+# AWS Configuration (for Files Service)
+AWS_ACCESS_KEY_ID=your-aws-access-key
+AWS_SECRET_ACCESS_KEY=your-aws-secret-key
+AWS_REGION=us-east-1
+S3_BUCKET_NAME=your-clouddock-bucket
+
+# Virus Scanning (Optional - for Files Service)
+ENABLE_VIRUS_SCAN=false
+VIRUS_SCAN_LAMBDA=clouddock-virus-scanner
+
+# Stripe Configuration (for Billing Service)
+STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key_here
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
+
+# Frontend URL (for redirects)
+FRONTEND_URL=http://localhost:5173
+
