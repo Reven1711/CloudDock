@@ -53,8 +53,49 @@ export interface UploadResponse {
   storageInfo: StorageInfo;
 }
 
+export interface BatchUploadResponse {
+  success: boolean;
+  message: string;
+  statistics: {
+    totalFiles: number;
+    successful: number;
+    failed: number;
+    processingTime: string;
+  };
+  uploadedFiles: Array<{
+    fileId: string;
+    fileName: string;
+    originalName: string;
+    size: number;
+    mimeType: string;
+    virusScanStatus: string;
+  }>;
+  errors: Array<{
+    fileName: string;
+    error: string;
+  }>;
+  storageInfo: StorageInfo;
+  workerPoolStats?: {
+    totalWorkers: number;
+    availableWorkers: number;
+    busyWorkers: number;
+    queuedTasks: number;
+  };
+}
+
+export interface BatchUploadOptions {
+  files: File[];
+  orgId: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  folder?: string;
+  parallelism?: number;
+  onProgress?: (progress: { uploaded: number; total: number }) => void;
+}
+
 /**
- * Upload a file to S3
+ * Upload a single file to S3
  */
 export const uploadFile = async (data: FileUploadData): Promise<UploadResponse> => {
   const formData = new FormData();
@@ -73,6 +114,115 @@ export const uploadFile = async (data: FileUploadData): Promise<UploadResponse> 
     },
   });
 
+  return response.data;
+};
+
+/**
+ * Upload multiple files in parallel using Worker Threads
+ * This provides significant performance improvements for batch uploads
+ */
+export const uploadMultipleFiles = async (
+  options: BatchUploadOptions
+): Promise<BatchUploadResponse> => {
+  const { files, orgId, userId, userName, userEmail, folder, parallelism } = options;
+
+  const formData = new FormData();
+  
+  // Append all files
+  files.forEach((file) => {
+    formData.append('files', file);
+  });
+  
+  // Append metadata
+  formData.append('orgId', orgId);
+  formData.append('userId', userId);
+  formData.append('userName', userName);
+  formData.append('userEmail', userEmail);
+  if (folder) {
+    formData.append('folder', folder);
+  }
+  if (parallelism) {
+    formData.append('parallelism', parallelism.toString());
+  }
+
+  const endpoint = parallelism 
+    ? `${API_BASE_URL}/files/upload/parallel` 
+    : `${API_BASE_URL}/files/upload/batch`;
+
+  const response = await axios.post(endpoint, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+    // Extended timeout for batch uploads
+    timeout: 300000, // 5 minutes
+  });
+
+  return response.data;
+};
+
+/**
+ * Upload files with automatic batching for large sets
+ * Automatically splits large file sets into optimal batches
+ */
+export const uploadFilesWithAutoBatching = async (
+  options: BatchUploadOptions
+): Promise<{
+  success: boolean;
+  totalFiles: number;
+  totalSuccessful: number;
+  totalFailed: number;
+  batches: BatchUploadResponse[];
+}> => {
+  const { files } = options;
+  const BATCH_SIZE = 20; // Process 20 files at a time
+  
+  const batches: BatchUploadResponse[] = [];
+  let totalSuccessful = 0;
+  let totalFailed = 0;
+
+  // Split files into batches
+  for (let i = 0; i < files.length; i += BATCH_SIZE) {
+    const batchFiles = files.slice(i, i + BATCH_SIZE);
+    
+    console.log(`Uploading batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(files.length / BATCH_SIZE)}...`);
+    
+    try {
+      const batchResult = await uploadMultipleFiles({
+        ...options,
+        files: batchFiles,
+      });
+      
+      batches.push(batchResult);
+      totalSuccessful += batchResult.statistics.successful;
+      totalFailed += batchResult.statistics.failed;
+      
+      // Call progress callback if provided
+      if (options.onProgress) {
+        options.onProgress({
+          uploaded: totalSuccessful,
+          total: files.length,
+        });
+      }
+    } catch (error) {
+      console.error(`Batch ${Math.floor(i / BATCH_SIZE) + 1} failed:`, error);
+      totalFailed += batchFiles.length;
+    }
+  }
+
+  return {
+    success: true,
+    totalFiles: files.length,
+    totalSuccessful,
+    totalFailed,
+    batches,
+  };
+};
+
+/**
+ * Get worker pool statistics
+ */
+export const getWorkerPoolStats = async () => {
+  const response = await axios.get(`${API_BASE_URL}/files/worker-pool/stats`);
   return response.data;
 };
 

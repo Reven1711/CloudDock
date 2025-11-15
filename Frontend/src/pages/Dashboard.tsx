@@ -264,12 +264,6 @@ const Dashboard = () => {
     file.originalName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const stats = [
-    { label: 'Total Storage', value: '500 GB', usage: '245 GB used' },
-    { label: 'Total Files', value: '1,234', usage: '89 folders' },
-    { label: 'Shared Files', value: '156', usage: '23 with you' },
-  ];
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-primary/5 to-secondary/10">
       {/* Organization Header */}
@@ -311,27 +305,6 @@ const Dashboard = () => {
               path="/"
               element={
                 <div className="p-6">
-                  {/* Stats */}
-                  {tenant.dashboard.showAnalytics && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 animate-fade-in">
-                    {stats.map((stat, index) => (
-                      <div
-                        key={index}
-                        className={tenant.dashboard.cardStyle === 'neumorphism' ? 'neumorphic-card rounded-2xl p-6 hover-lift' : 'glass-card rounded-2xl p-6 hover-lift'}
-                        style={{ animationDelay: `${index * 100}ms` }}
-                      >
-                        <h3 className="text-sm font-medium text-muted-foreground mb-1">
-                          {stat.label}
-                        </h3>
-                        <p className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-1">
-                          {stat.value}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{stat.usage}</p>
-                      </div>
-                    ))}
-                  </div>
-                  )}
-
           {/* Approval Notice for pending users */}
           {!user?.approved && (
             <div className="glass-card rounded-2xl p-4 mb-4">
@@ -454,12 +427,6 @@ const Dashboard = () => {
                                       <h4 className="font-semibold truncate">{file.originalName}</h4>
                                       <p className="text-sm text-muted-foreground">{formatFileSize(file.size)}</p>
                                       <p className="text-xs text-muted-foreground">{formatRelativeTime(file.uploadedAt)}</p>
-                                      {file.virusScanStatus === 'scanning' && (
-                                        <p className="text-xs text-yellow-500 mt-1">🔍 Scanning...</p>
-                                      )}
-                                      {file.virusScanStatus === 'infected' && (
-                                        <p className="text-xs text-red-500 mt-1">⚠️ Infected</p>
-                                      )}
                                     </div>
                                     {/* Action Buttons - Only for files, not folders */}
                                     {file.mimeType !== 'application/vnd.clouddock.folder' && (
@@ -471,7 +438,6 @@ const Dashboard = () => {
                                             e.stopPropagation();
                                             handleDownload(file.fileId, file.originalName);
                                           }}
-                                          disabled={file.virusScanStatus === 'infected'}
                                         >
                                           <Download className="w-3 h-3" />
                                         </Button>
@@ -520,7 +486,6 @@ const Dashboard = () => {
                                       e.stopPropagation();
                                       handleDownload(file.fileId, file.originalName);
                                     }}
-                                    disabled={file.virusScanStatus === 'infected'}
                                   >
                                     <Download className="w-3 h-3" />
                                   </Button>
@@ -550,7 +515,6 @@ const Dashboard = () => {
                                 <th className="text-left p-3 font-semibold">Name</th>
                                 <th className="text-left p-3 font-semibold">Size</th>
                                 <th className="text-left p-3 font-semibold">Date</th>
-                                <th className="text-left p-3 font-semibold">Status</th>
                                 <th className="text-left p-3 font-semibold">Actions</th>
                               </tr>
                             </thead>
@@ -571,12 +535,6 @@ const Dashboard = () => {
                                       <td className="p-3 text-sm text-muted-foreground">{formatFileSize(file.size)}</td>
                                       <td className="p-3 text-sm text-muted-foreground">{formatRelativeTime(file.uploadedAt)}</td>
                                       <td className="p-3">
-                                        {file.virusScanStatus === 'clean' && <span className="text-green-500 text-xs">✓ Clean</span>}
-                                        {file.virusScanStatus === 'scanning' && <span className="text-yellow-500 text-xs">🔍 Scanning</span>}
-                                        {file.virusScanStatus === 'infected' && <span className="text-red-500 text-xs">⚠️ Infected</span>}
-                                        {file.virusScanStatus === 'pending' && <span className="text-gray-500 text-xs">⏳ Pending</span>}
-                                      </td>
-                                      <td className="p-3">
                                         {file.mimeType !== 'application/vnd.clouddock.folder' ? (
                                           <div className="flex gap-1">
                                             <Button
@@ -586,7 +544,6 @@ const Dashboard = () => {
                                                 e.stopPropagation();
                                                 handleDownload(file.fileId, file.originalName);
                                               }}
-                                              disabled={file.virusScanStatus === 'infected'}
                                             >
                                               <Download className="w-3 h-3" />
                                             </Button>
@@ -638,7 +595,6 @@ const Dashboard = () => {
                                       e.stopPropagation();
                                       handleDownload(file.fileId, file.originalName);
                                     }}
-                                    disabled={file.virusScanStatus === 'infected'}
                                   >
                                     <Download className="w-3 h-3" />
                                   </Button>

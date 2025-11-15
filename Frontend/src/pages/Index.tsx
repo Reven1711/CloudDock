@@ -42,7 +42,7 @@ const Index = () => {
               <Cloud className="w-6 h-6 text-white" />
             </div>
             <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              Skyvault
+              CloudDock
             </span>
           </div>
           <div className="flex items-center gap-4">
@@ -141,7 +141,7 @@ const Index = () => {
         {/* Benefits Grid */}
         <div className="glass-card rounded-3xl p-12 max-w-4xl mx-auto">
           <h3 className="text-2xl font-bold mb-8 text-center">
-            Why choose Skyvault?
+            Why choose CloudDock?
           </h3>
           <div className="grid md:grid-cols-2 gap-4">
             {benefits.map((benefit, index) => (
@@ -169,7 +169,7 @@ const Index = () => {
               Ready to get started?
             </h2>
             <p className="text-muted-foreground text-lg mb-8">
-              Join thousands of teams already using Skyvault
+              Join thousands of teams already using CloudDock
             </p>
             <Button
               size="lg"
@@ -186,7 +186,7 @@ const Index = () => {
       {/* Footer */}
       <footer className="glass-card border-t border-white/10 py-8">
         <div className="container mx-auto px-6 text-center text-sm text-muted-foreground">
-          <p>© 2024 Skyvault. All rights reserved.</p>
+          <p>© 2024 CloudDock. All rights reserved.</p>
         </div>
       </footer>
     </div>

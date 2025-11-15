@@ -509,37 +509,6 @@ const AdminDashboard = () => {
                   </div>
                 </CardContent>
               </Card>
-
-              {/* Quick Actions */}
-              <Card className="glass-card border-primary/20">
-                <CardHeader>
-                  <CardTitle>Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <Button 
-                    variant="outline" 
-                    className="justify-start glass-card border-primary/20 hover:border-primary/40"
-                    onClick={() => navigate('/admin/users')}
-                  >
-                    <Users className="w-4 h-4 mr-2" />
-                    Manage Users
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    className="justify-start glass-card border-primary/20 hover:border-primary/40"
-                  >
-                    <HardDrive className="w-4 h-4 mr-2" />
-                    View All Files
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    className="justify-start glass-card border-primary/20 hover:border-primary/40"
-                  >
-                    <Settings className="w-4 h-4 mr-2" />
-                    Organization Settings
-                  </Button>
-                </CardContent>
-              </Card>
             </TabsContent>
 
             {/* All Files Tab */}
@@ -575,12 +544,6 @@ const AdminDashboard = () => {
                                   <p className="text-sm text-muted-foreground">{formatFileSize(file.size)}</p>
                                   <p className="text-xs text-muted-foreground">{formatRelativeTime(file.uploadedAt)}</p>
                                   <p className="text-xs text-primary mt-2">Owner: {file.uploadedBy.userName}</p>
-                                  {file.virusScanStatus === 'scanning' && (
-                                    <p className="text-xs text-yellow-500 mt-1">🔍 Scanning...</p>
-                                  )}
-                                  {file.virusScanStatus === 'infected' && (
-                                    <p className="text-xs text-red-500 mt-1">⚠️ Infected</p>
-                                  )}
                                 </div>
                                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                   <Button size="sm" variant="outline">
@@ -631,7 +594,6 @@ const AdminDashboard = () => {
                                 <th className="text-left p-3 font-semibold">Size</th>
                                 <th className="text-left p-3 font-semibold">Date</th>
                                 <th className="text-left p-3 font-semibold">Owner</th>
-                                <th className="text-left p-3 font-semibold">Status</th>
                                 <th className="text-left p-3 font-semibold">Actions</th>
                               </tr>
                             </thead>
@@ -645,12 +607,6 @@ const AdminDashboard = () => {
                                   <td className="p-3 text-sm text-muted-foreground">{formatFileSize(file.size)}</td>
                                   <td className="p-3 text-sm text-muted-foreground">{formatRelativeTime(file.uploadedAt)}</td>
                                   <td className="p-3 text-sm text-primary">{file.uploadedBy.userName}</td>
-                                  <td className="p-3">
-                                    {file.virusScanStatus === 'clean' && <span className="text-green-500 text-xs">✓ Clean</span>}
-                                    {file.virusScanStatus === 'scanning' && <span className="text-yellow-500 text-xs">🔍 Scanning</span>}
-                                    {file.virusScanStatus === 'infected' && <span className="text-red-500 text-xs">⚠️ Infected</span>}
-                                    {file.virusScanStatus === 'pending' && <span className="text-gray-500 text-xs">⏳ Pending</span>}
-                                  </td>
                                   <td className="p-3">
                                     <div className="flex gap-1">
                                       <Button size="sm" variant="ghost">

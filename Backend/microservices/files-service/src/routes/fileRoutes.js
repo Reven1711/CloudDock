@@ -9,6 +9,12 @@ import {
   getStorageInfo,
   getFileDetails,
 } from "../controllers/fileController.js";
+import {
+  uploadMultipleFiles,
+  getBatchUploadProgress,
+  getWorkerPoolStats,
+  uploadWithCustomParallelism,
+} from "../controllers/batchFileController.js";
 import { handleVirusScanCallback } from "../services/virusScanService.js";
 
 const router = express.Router();
@@ -18,12 +24,23 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100 MB
+    fileSize: 100 * 1024 * 1024, // 100 MB per file
+    files: 100, // Maximum 100 files in a single batch
   },
 });
 
-// File upload
+// Single file upload
 router.post("/upload", upload.single("file"), uploadFile);
+
+// Batch upload - Multiple files in parallel using Worker Threads
+router.post("/upload/batch", upload.array("files", 100), uploadMultipleFiles);
+
+// Custom parallelism upload
+router.post(
+  "/upload/parallel",
+  upload.array("files", 100),
+  uploadWithCustomParallelism
+);
 
 // Create folder
 router.post("/folder", createFolder);
@@ -46,5 +63,8 @@ router.get("/storage/:orgId", getStorageInfo);
 // Virus scan callback (from Lambda)
 router.post("/virus-scan-callback", handleVirusScanCallback);
 
-export default router;
+// Worker Pool Management
+router.get("/worker-pool/stats", getWorkerPoolStats);
+router.get("/batch/:batchId/progress", getBatchUploadProgress);
 
+export default router;
