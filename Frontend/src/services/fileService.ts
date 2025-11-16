@@ -300,6 +300,87 @@ export const deleteFile = async (
 };
 
 /**
+ * Bulk delete multiple files
+ */
+export interface BulkDeleteResponse {
+  success: boolean;
+  message: string;
+  statistics: {
+    totalRequested: number;
+    successful: number;
+    failed: number;
+    totalSizeFreed: number;
+  };
+  deletedFiles: Array<{
+    fileId: string;
+    fileName: string;
+    size: number;
+  }>;
+  errors: Array<{
+    fileId: string;
+    error: string;
+  }>;
+  storageInfo: StorageInfo;
+}
+
+export const bulkDeleteFiles = async (
+  fileIds: string[],
+  orgId: string,
+  userId: string
+): Promise<BulkDeleteResponse> => {
+  const response = await axios.post<BulkDeleteResponse>(
+    `${API_BASE_URL}/files/delete/bulk`,
+    {
+      fileIds,
+      orgId,
+      userId,
+    }
+  );
+  return response.data;
+};
+
+/**
+ * Delete a folder and optionally its contents
+ */
+export interface DeleteFolderResponse {
+  success: boolean;
+  message: string;
+  deletedFolder: {
+    fileId: string;
+    folderName: string;
+    path: string;
+  };
+  statistics: {
+    totalItemsDeleted: number;
+    filesDeleted: number;
+    foldersDeleted: number;
+    totalSizeFreed: number;
+  };
+  deletedItems: Array<{
+    fileId: string;
+    fileName: string;
+    mimeType: string;
+    size: number;
+  }>;
+  storageInfo: StorageInfo;
+}
+
+export const deleteFolder = async (
+  folderId: string,
+  orgId: string,
+  userId: string,
+  recursive: boolean = true
+): Promise<DeleteFolderResponse> => {
+  const response = await axios.delete<DeleteFolderResponse>(
+    `${API_BASE_URL}/files/folder/${folderId}`,
+    {
+      params: { orgId, userId, recursive: recursive.toString() },
+    }
+  );
+  return response.data;
+};
+
+/**
  * Format bytes to human readable size
  */
 export const formatFileSize = (bytes: number): string => {

@@ -1,5 +1,6 @@
 import { FileCard } from '@/components/dashboard/FileCard';
-import { Search, Upload, FolderPlus, LogOut, Download, Trash2 } from 'lucide-react';
+import { FileItemCard } from '@/components/dashboard/FileItemCard';
+import { Search, Upload, FolderPlus, LogOut, Download, Trash2, CheckSquare, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState, useEffect } from 'react';
 import { useTenant } from '@/contexts/TenantContext';
@@ -12,6 +13,8 @@ import {
   getOrganizationFiles,
   getFileDownloadUrl,
   deleteFile,
+  bulkDeleteFiles,
+  deleteFolder,
   formatFileSize,
   getFileIcon,
   formatRelativeTime,
@@ -106,6 +109,8 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [currentFolder, setCurrentFolder] = useState('/'); // Track current folder path
   const [folderHistory, setFolderHistory] = useState<string[]>(['/']); // For breadcrumb navigation
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set()); // Track selected file IDs
+  const [isSelectionMode, setIsSelectionMode] = useState(false); // Toggle selection mode
 
   // Redirect admins to admin dashboard
   useEffect(() => {
@@ -257,6 +262,121 @@ const Dashboard = () => {
       setFolderHistory(folderHistory.slice(0, index + 1));
     }
     fetchFiles(path);
+    // Clear selection when navigating
+    setSelectedFiles(new Set());
+    setIsSelectionMode(false);
+  };
+
+  // Toggle file selection
+  const toggleFileSelection = (fileId: string) => {
+    const newSelection = new Set(selectedFiles);
+    if (newSelection.has(fileId)) {
+      newSelection.delete(fileId);
+    } else {
+      newSelection.add(fileId);
+    }
+    setSelectedFiles(newSelection);
+  };
+
+  // Select all files
+  const selectAll = () => {
+    const allFileIds = new Set(filteredFiles.map(file => file.fileId));
+    setSelectedFiles(allFileIds);
+  };
+
+  // Clear selection
+  const clearSelection = () => {
+    setSelectedFiles(new Set());
+    setIsSelectionMode(false);
+  };
+
+  // Handle bulk delete
+  const handleBulkDelete = async () => {
+    if (selectedFiles.size === 0 || !user?.tenantId || !user?.id) return;
+
+    // Separate files and folders
+    const selectedItems = filteredFiles.filter(file => selectedFiles.has(file.fileId));
+    const selectedFileItems = selectedItems.filter(item => item.mimeType !== 'application/vnd.clouddock.folder');
+    const selectedFolderItems = selectedItems.filter(item => item.mimeType === 'application/vnd.clouddock.folder');
+
+    const totalItems = selectedFiles.size;
+    const confirmMessage = selectedFolderItems.length > 0
+      ? `Are you sure you want to delete ${totalItems} item(s)?\n\nThis includes ${selectedFolderItems.length} folder(s) and their contents!`
+      : `Are you sure you want to delete ${totalItems} file(s)?`;
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      let totalDeleted = 0;
+      let totalFailed = 0;
+
+      // Delete files in bulk
+      if (selectedFileItems.length > 0) {
+        const fileIds = selectedFileItems.map(f => f.fileId);
+        const result = await bulkDeleteFiles(fileIds, user.tenantId, user.id);
+        totalDeleted += result.statistics.successful;
+        totalFailed += result.statistics.failed;
+
+        if (result.statistics.failed > 0) {
+          console.error('Some files failed to delete:', result.errors);
+        }
+      }
+
+      // Delete folders individually (with recursive option)
+      for (const folder of selectedFolderItems) {
+        try {
+          await deleteFolder(folder.fileId, user.tenantId, user.id, true);
+          totalDeleted++;
+        } catch (error) {
+          console.error(`Failed to delete folder ${folder.originalName}:`, error);
+          totalFailed++;
+        }
+      }
+
+      toast({
+        title: "Deletion complete",
+        description: `Successfully deleted ${totalDeleted} item(s).${totalFailed > 0 ? ` ${totalFailed} item(s) failed.` : ''}`,
+        variant: totalFailed > 0 ? "destructive" : "default",
+      });
+
+      // Clear selection and refresh
+      clearSelection();
+      fetchFiles();
+    } catch (error) {
+      console.error('Bulk delete failed:', error);
+      toast({
+        title: "Delete failed",
+        description: "Could not delete selected items. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle folder deletion
+  const handleFolderDelete = async (fileId: string, folderName: string) => {
+    if (!user?.tenantId || !user?.id) return;
+
+    if (!confirm(`Are you sure you want to delete "${folderName}" and all its contents?`)) {
+      return;
+    }
+
+    try {
+      const result = await deleteFolder(fileId, user.tenantId, user.id, true);
+      toast({
+        title: "Folder deleted",
+        description: `${folderName} and ${result.statistics.totalItemsDeleted - 1} item(s) inside were deleted.`,
+      });
+      fetchFiles();
+    } catch (error: any) {
+      console.error('Folder delete failed:', error);
+      toast({
+        title: "Delete failed",
+        description: error.response?.data?.message || "Could not delete folder. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   // Filter files based on search query
@@ -367,25 +487,77 @@ const Dashboard = () => {
 
                       {/* Action Buttons */}
                       <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          className="glass-card border-primary/20 hover:border-primary/40"
-                          disabled={!user?.approved}
-                          onClick={() => setFolderDialogOpen(true)}
-                        >
-                          <FolderPlus className="w-4 h-4 mr-2" />
-                          New Folder
-                        </Button>
-                        <Button 
-                          className="bg-gradient-primary text-white"
-                          onClick={() => setUploadDialogOpen(true)}
-                          disabled={!user?.approved}
-                        >
-                          <Upload className="w-4 h-4 mr-2" />
-                          Upload
-                        </Button>
+                        {!isSelectionMode ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              className="glass-card border-primary/20 hover:border-primary/40"
+                              onClick={() => setIsSelectionMode(true)}
+                              disabled={filteredFiles.length === 0}
+                            >
+                              <CheckSquare className="w-4 h-4 mr-2" />
+                              Select
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="glass-card border-primary/20 hover:border-primary/40"
+                              disabled={!user?.approved}
+                              onClick={() => setFolderDialogOpen(true)}
+                            >
+                              <FolderPlus className="w-4 h-4 mr-2" />
+                              New Folder
+                            </Button>
+                            <Button 
+                              className="bg-gradient-primary text-white"
+                              onClick={() => setUploadDialogOpen(true)}
+                              disabled={!user?.approved}
+                            >
+                              <Upload className="w-4 h-4 mr-2" />
+                              Upload
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              variant="outline"
+                              className="glass-card border-primary/20"
+                              onClick={selectAll}
+                            >
+                              Select All ({filteredFiles.length})
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="glass-card border-primary/20"
+                              onClick={clearSelection}
+                            >
+                              Cancel
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
+
+                    {/* Selection Action Bar */}
+                    {isSelectionMode && selectedFiles.size > 0 && (
+                      <div className="glass-card border-primary/20 p-4 rounded-lg flex items-center justify-between animate-scale-in">
+                        <div className="flex items-center gap-3">
+                          <CheckSquare className="w-5 h-5 text-primary" />
+                          <span className="font-medium">
+                            {selectedFiles.size} item{selectedFiles.size !== 1 ? 's' : ''} selected
+                          </span>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="destructive"
+                            onClick={handleBulkDelete}
+                            className="bg-red-500 hover:bg-red-600 text-white"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Delete Selected
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Storage Quota Card */}
@@ -413,48 +585,19 @@ const Dashboard = () => {
                       {tenant.dashboard.fileViewLayout === 'large-icons' && (
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                               {filteredFiles.map((file, index) => (
-                                <div
+                                <FileItemCard
                                   key={file.fileId}
-                                  className={`glass-card border-primary/20 p-6 rounded-lg hover:scale-105 transition-transform animate-scale-in group ${
-                                    file.mimeType === 'application/vnd.clouddock.folder' ? 'cursor-pointer' : ''
-                                  }`}
-                                  style={{ animationDelay: `${index * 50}ms` }}
-                                  onClick={() => file.mimeType === 'application/vnd.clouddock.folder' && handleFolderClick(file)}
-                                >
-                                  <div className="flex flex-col items-center text-center space-y-3">
-                                    <div className="text-6xl">{getFileIcon(file.mimeType)}</div>
-                                    <div className="w-full">
-                                      <h4 className="font-semibold truncate">{file.originalName}</h4>
-                                      <p className="text-sm text-muted-foreground">{formatFileSize(file.size)}</p>
-                                      <p className="text-xs text-muted-foreground">{formatRelativeTime(file.uploadedAt)}</p>
-                                    </div>
-                                    {/* Action Buttons - Only for files, not folders */}
-                                    {file.mimeType !== 'application/vnd.clouddock.folder' && (
-                                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDownload(file.fileId, file.originalName);
-                                          }}
-                                        >
-                                          <Download className="w-3 h-3" />
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDelete(file.fileId, file.originalName);
-                                          }}
-                                        >
-                                          <Trash2 className="w-3 h-3" />
-                                        </Button>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
+                                  file={file}
+                                  viewMode="large-icons"
+                                  isSelectionMode={isSelectionMode}
+                                  isSelected={selectedFiles.has(file.fileId)}
+                                  onSelect={toggleFileSelection}
+                                  onFolderClick={handleFolderClick}
+                                  onDownload={handleDownload}
+                                  onDelete={handleDelete}
+                                  onFolderDelete={handleFolderDelete}
+                                  animationDelay={index * 50}
+                                />
                               ))}
                             </div>
                           )}
@@ -463,45 +606,19 @@ const Dashboard = () => {
                       {tenant.dashboard.fileViewLayout === 'list' && (
                         <div className="space-y-2">
                           {filteredFiles.map((file, index) => (
-                            <div
+                            <FileItemCard
                               key={file.fileId}
-                              className={`glass-card border-primary/20 p-3 rounded-lg flex items-center gap-4 hover:bg-primary/5 transition-colors animate-scale-in group ${
-                                file.mimeType === 'application/vnd.clouddock.folder' ? 'cursor-pointer' : ''
-                              }`}
-                              style={{ animationDelay: `${index * 50}ms` }}
-                              onClick={() => file.mimeType === 'application/vnd.clouddock.folder' && handleFolderClick(file)}
-                            >
-                              <div className="text-2xl">{getFileIcon(file.mimeType)}</div>
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-medium truncate">{file.originalName}</h4>
-                              </div>
-                              <div className="text-sm text-muted-foreground">{formatFileSize(file.size)}</div>
-                              <div className="text-sm text-muted-foreground w-24">{formatRelativeTime(file.uploadedAt)}</div>
-                              {file.mimeType !== 'application/vnd.clouddock.folder' && (
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDownload(file.fileId, file.originalName);
-                                    }}
-                                  >
-                                    <Download className="w-3 h-3" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDelete(file.fileId, file.originalName);
-                                    }}
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
+                              file={file}
+                              viewMode="list"
+                              isSelectionMode={isSelectionMode}
+                              isSelected={selectedFiles.has(file.fileId)}
+                              onSelect={toggleFileSelection}
+                              onFolderClick={handleFolderClick}
+                              onDownload={handleDownload}
+                              onDelete={handleDelete}
+                              onFolderDelete={handleFolderDelete}
+                              animationDelay={index * 50}
+                            />
                           ))}
                         </div>
                       )}
@@ -512,57 +629,28 @@ const Dashboard = () => {
                           <table className="w-full">
                             <thead className="bg-primary/10 border-b border-primary/20">
                               <tr>
+                                {isSelectionMode && <th className="text-left p-3 font-semibold w-12"></th>}
                                 <th className="text-left p-3 font-semibold">Name</th>
                                 <th className="text-left p-3 font-semibold">Size</th>
                                 <th className="text-left p-3 font-semibold">Date</th>
-                                <th className="text-left p-3 font-semibold">Actions</th>
+                                {!isSelectionMode && <th className="text-left p-3 font-semibold">Actions</th>}
                               </tr>
                             </thead>
                             <tbody>
                               {filteredFiles.map((file, index) => (
-                                <tr
+                                <FileItemCard
                                   key={file.fileId}
-                                  className={`border-b border-primary/10 hover:bg-primary/5 transition-colors animate-scale-in ${
-                                    index % 2 === 0 ? 'bg-background/50' : ''
-                                  } ${file.mimeType === 'application/vnd.clouddock.folder' ? 'cursor-pointer' : ''}`}
-                                  style={{ animationDelay: `${index * 50}ms` }}
-                                  onClick={() => file.mimeType === 'application/vnd.clouddock.folder' && handleFolderClick(file)}
-                                >
-                                      <td className="p-3 flex items-center gap-3">
-                                        <span className="text-xl">{getFileIcon(file.mimeType)}</span>
-                                        <span className="font-medium">{file.originalName}</span>
-                                      </td>
-                                      <td className="p-3 text-sm text-muted-foreground">{formatFileSize(file.size)}</td>
-                                      <td className="p-3 text-sm text-muted-foreground">{formatRelativeTime(file.uploadedAt)}</td>
-                                      <td className="p-3">
-                                        {file.mimeType !== 'application/vnd.clouddock.folder' ? (
-                                          <div className="flex gap-1">
-                                            <Button
-                                              size="sm"
-                                              variant="ghost"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDownload(file.fileId, file.originalName);
-                                              }}
-                                            >
-                                              <Download className="w-3 h-3" />
-                                            </Button>
-                                            <Button
-                                              size="sm"
-                                              variant="ghost"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDelete(file.fileId, file.originalName);
-                                              }}
-                                            >
-                                              <Trash2 className="w-3 h-3" />
-                                            </Button>
-                                          </div>
-                                        ) : (
-                                          <span className="text-xs text-muted-foreground">Click to open</span>
-                                        )}
-                                      </td>
-                                </tr>
+                                  file={file}
+                                  viewMode="details"
+                                  isSelectionMode={isSelectionMode}
+                                  isSelected={selectedFiles.has(file.fileId)}
+                                  onSelect={toggleFileSelection}
+                                  onFolderClick={handleFolderClick}
+                                  onDownload={handleDownload}
+                                  onDelete={handleDelete}
+                                  onFolderDelete={handleFolderDelete}
+                                  animationDelay={index * 50}
+                                />
                               ))}
                             </tbody>
                           </table>
@@ -573,44 +661,19 @@ const Dashboard = () => {
                       {tenant.dashboard.fileViewLayout === 'tiles' && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                           {filteredFiles.map((file, index) => (
-                            <div
+                            <FileItemCard
                               key={file.fileId}
-                              className={`glass-card border-primary/20 p-4 rounded-lg hover:shadow-lg transition-shadow animate-scale-in group ${
-                                file.mimeType === 'application/vnd.clouddock.folder' ? 'cursor-pointer' : ''
-                              }`}
-                              style={{ animationDelay: `${index * 50}ms` }}
-                              onClick={() => file.mimeType === 'application/vnd.clouddock.folder' && handleFolderClick(file)}
-                            >
-                              <div className="text-4xl mb-3">{getFileIcon(file.mimeType)}</div>
-                              <h4 className="font-semibold text-sm truncate mb-1">{file.originalName}</h4>
-                              <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
-                              <p className="text-xs text-muted-foreground">{formatRelativeTime(file.uploadedAt)}</p>
-                              {/* Action Buttons - Only for files */}
-                              {file.mimeType !== 'application/vnd.clouddock.folder' && (
-                                <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDownload(file.fileId, file.originalName);
-                                    }}
-                                  >
-                                    <Download className="w-3 h-3" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDelete(file.fileId, file.originalName);
-                                    }}
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
+                              file={file}
+                              viewMode="tiles"
+                              isSelectionMode={isSelectionMode}
+                              isSelected={selectedFiles.has(file.fileId)}
+                              onSelect={toggleFileSelection}
+                              onFolderClick={handleFolderClick}
+                              onDownload={handleDownload}
+                              onDelete={handleDelete}
+                              onFolderDelete={handleFolderDelete}
+                              animationDelay={index * 50}
+                            />
                           ))}
                         </div>
                       )}

@@ -422,6 +422,231 @@ export const deleteFile = async (req, res) => {
 };
 
 /**
+ * Bulk delete multiple files
+ */
+export const bulkDeleteFiles = async (req, res) => {
+  try {
+    const { fileIds, orgId, userId } = req.body;
+
+    if (!fileIds || !Array.isArray(fileIds) || fileIds.length === 0) {
+      return res.status(400).json({ error: "File IDs array is required" });
+    }
+
+    if (!orgId) {
+      return res.status(400).json({ error: "Organization ID is required" });
+    }
+
+    const results = {
+      successful: [],
+      failed: [],
+      totalSize: 0,
+    };
+
+    // Process each file
+    for (const fileId of fileIds) {
+      try {
+        const file = await FileModel.findOne({ fileId, isDeleted: false });
+
+        if (!file) {
+          results.failed.push({
+            fileId,
+            error: "File not found",
+          });
+          continue;
+        }
+
+        // Check organization access
+        if (file.orgId !== orgId) {
+          results.failed.push({
+            fileId,
+            error: "Access denied",
+          });
+          continue;
+        }
+
+        // Skip folders - use deleteFolder endpoint for those
+        if (file.mimeType === "application/vnd.clouddock.folder") {
+          results.failed.push({
+            fileId,
+            error: "Use deleteFolder endpoint for folders",
+          });
+          continue;
+        }
+
+        // Soft delete
+        file.isDeleted = true;
+        file.deletedAt = new Date();
+        await file.save();
+
+        // Track size for storage update
+        results.totalSize += file.size;
+
+        results.successful.push({
+          fileId: file.fileId,
+          fileName: file.fileName,
+          size: file.size,
+        });
+      } catch (error) {
+        results.failed.push({
+          fileId,
+          error: error.message,
+        });
+      }
+    }
+
+    // Update storage usage once for all deleted files
+    if (results.totalSize > 0) {
+      await decrementStorageUsage(orgId, results.totalSize);
+    }
+
+    // Get updated storage info
+    const storageInfo = await getStorageQuota(orgId);
+
+    res.json({
+      success: true,
+      message: `Successfully deleted ${results.successful.length} file(s)`,
+      statistics: {
+        totalRequested: fileIds.length,
+        successful: results.successful.length,
+        failed: results.failed.length,
+        totalSizeFreed: results.totalSize,
+      },
+      deletedFiles: results.successful,
+      errors: results.failed,
+      storageInfo,
+    });
+  } catch (error) {
+    console.error("Bulk delete files error:", error);
+    res.status(500).json({
+      error: "Failed to delete files",
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * Delete a folder and all its contents (files and subfolders)
+ */
+export const deleteFolder = async (req, res) => {
+  try {
+    const { folderId } = req.params;
+    const { orgId, userId, recursive } = req.query;
+
+    if (!folderId) {
+      return res.status(400).json({ error: "Folder ID is required" });
+    }
+
+    if (!orgId) {
+      return res.status(400).json({ error: "Organization ID is required" });
+    }
+
+    // Find the folder
+    const folder = await FileModel.findOne({
+      fileId: folderId,
+      orgId,
+      isDeleted: false,
+      mimeType: "application/vnd.clouddock.folder",
+    });
+
+    if (!folder) {
+      return res.status(404).json({ error: "Folder not found" });
+    }
+
+    // Construct the folder path
+    const folderPath =
+      folder.folder === "/"
+        ? `/${folder.fileName}/`
+        : `${folder.folder}${folder.fileName}/`;
+
+    // Find all files and subfolders within this folder
+    const folderContents = await FileModel.find({
+      orgId,
+      folder: { $regex: `^${folderPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` },
+      isDeleted: false,
+    });
+
+    // If not recursive and folder has contents, return error
+    if (recursive !== 'true' && folderContents.length > 0) {
+      return res.status(400).json({
+        error: "Folder is not empty",
+        message: "Use recursive=true to delete folder with contents",
+        contentsCount: folderContents.length,
+      });
+    }
+
+    let totalSizeFreed = 0;
+    const deletedItems = [];
+
+    // Delete all contents recursively
+    for (const item of folderContents) {
+      item.isDeleted = true;
+      item.deletedAt = new Date();
+      await item.save();
+
+      deletedItems.push({
+        fileId: item.fileId,
+        fileName: item.fileName,
+        mimeType: item.mimeType,
+        size: item.size,
+      });
+
+      // Only count file sizes, not folder sizes
+      if (item.mimeType !== "application/vnd.clouddock.folder") {
+        totalSizeFreed += item.size;
+      }
+    }
+
+    // Delete the folder itself
+    folder.isDeleted = true;
+    folder.deletedAt = new Date();
+    await folder.save();
+
+    deletedItems.push({
+      fileId: folder.fileId,
+      fileName: folder.fileName,
+      mimeType: folder.mimeType,
+      size: folder.size,
+    });
+
+    // Update storage usage
+    if (totalSizeFreed > 0) {
+      await decrementStorageUsage(orgId, totalSizeFreed);
+    }
+
+    // Get updated storage info
+    const storageInfo = await getStorageQuota(orgId);
+
+    res.json({
+      success: true,
+      message: `Folder "${folder.fileName}" and its contents deleted successfully`,
+      deletedFolder: {
+        fileId: folder.fileId,
+        folderName: folder.fileName,
+        path: folderPath,
+      },
+      statistics: {
+        totalItemsDeleted: deletedItems.length,
+        filesDeleted: deletedItems.filter(
+          (i) => i.mimeType !== "application/vnd.clouddock.folder"
+        ).length,
+        foldersDeleted: deletedItems.filter(
+          (i) => i.mimeType === "application/vnd.clouddock.folder"
+        ).length,
+        totalSizeFreed,
+      },
+      deletedItems,
+      storageInfo,
+    });
+  } catch (error) {
+    console.error("Delete folder error:", error);
+    res.status(500).json({
+      error: "Failed to delete folder",
+      message: error.message,
+    });
+  }
+};
+
+/**
  * Get storage quota for organization
  */
 export const getStorageInfo = async (req, res) => {

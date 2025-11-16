@@ -6,6 +6,8 @@ import {
   getFileDownloadUrl,
   getOrganizationFiles,
   deleteFile,
+  bulkDeleteFiles,
+  deleteFolder,
   getStorageInfo,
   recalculateStorage,
   getFileDetails,
@@ -64,6 +66,12 @@ router.get("/:fileId", getFileDetails);
 
 // Delete file
 router.delete("/:fileId", deleteFile);
+
+// Bulk delete files
+router.post("/delete/bulk", bulkDeleteFiles);
+
+// Delete folder (with optional recursive deletion)
+router.delete("/folder/:folderId", deleteFolder);
 
 // Get organization files
 router.get("/org/:orgId", getOrganizationFiles);
