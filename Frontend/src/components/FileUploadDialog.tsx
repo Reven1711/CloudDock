@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { uploadFile, uploadMultipleFiles, formatFileSize } from '@/services/fileService';
+import { uploadLargeFile, shouldUseDirectUpload, getUploadMethodDescription } from '@/services/directUploadService';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -149,27 +150,57 @@ export const FileUploadDialog = ({ isOpen, onClose, onUploadSuccess, currentFold
         }
       } else {
         // Single file upload
-        const progressInterval = setInterval(() => {
-          setUploadProgress((prev) => Math.min(prev + 10, 90));
-        }, 200);
+        const file = selectedFiles[0];
+        const useDirectUpload = shouldUseDirectUpload(file.size);
 
-        await uploadFile({
-          file: selectedFiles[0],
-          orgId: user.tenantId,
-          userId: user.id,
-          userName: user.name,
-          userEmail: user.email,
-          folder: currentFolder,
-        });
+        if (useDirectUpload) {
+          // Use direct S3 upload for large files (> 30MB)
+          console.log(`🚀 Using direct S3 upload for ${file.name} (${formatFileSize(file.size)})`);
+          
+          await uploadLargeFile(
+            file,
+            {
+              orgId: user.tenantId,
+              userId: user.id,
+              userName: user.name,
+              userEmail: user.email,
+              folder: currentFolder,
+            },
+            (progress) => {
+              setUploadProgress(progress);
+            }
+          );
 
-        clearInterval(progressInterval);
-        setUploadProgress(100);
-        setUploadStatus('success');
+          setUploadStatus('success');
+          
+          toast({
+            title: "Upload successful!",
+            description: `${file.name} has been uploaded successfully via direct S3 upload.`,
+          });
+        } else {
+          // Use standard upload for small files (< 30MB)
+          const progressInterval = setInterval(() => {
+            setUploadProgress((prev) => Math.min(prev + 10, 90));
+          }, 200);
 
-        toast({
-          title: "Upload successful!",
-          description: `${selectedFiles[0].name} has been uploaded successfully.`,
-        });
+          await uploadFile({
+            file: file,
+            orgId: user.tenantId,
+            userId: user.id,
+            userName: user.name,
+            userEmail: user.email,
+            folder: currentFolder,
+          });
+
+          clearInterval(progressInterval);
+          setUploadProgress(100);
+          setUploadStatus('success');
+
+          toast({
+            title: "Upload successful!",
+            description: `${file.name} has been uploaded successfully.`,
+          });
+        }
       }
 
       // Call success callback
@@ -225,7 +256,16 @@ export const FileUploadDialog = ({ isOpen, onClose, onUploadSuccess, currentFold
             {batchMode ? 'Batch Upload (Worker Threads)' : 'Upload File'}
           </DialogTitle>
           <DialogDescription>
-            {batchMode ? 'Upload multiple files in parallel using Worker Threads for optimal performance. Maximum 100 files, 100 MB each.' : 'Select a file to upload. Maximum size: 100 MB.'}
+            {batchMode ? (
+              'Upload multiple files in parallel using Worker Threads for optimal performance. Maximum 100 files, 100 MB each.'
+            ) : (
+              <>
+                Select a file to upload. <strong>Maximum size: 100 MB.</strong>
+                <span className="block mt-1 text-xs text-muted-foreground">
+                  💡 Files over 30MB use direct S3 upload for better reliability
+                </span>
+              </>
+            )}
             {currentFolder === '/' ? (
               <span className="block mt-1">Uploading to: <strong>Root folder</strong></span>
             ) : (
@@ -338,6 +378,9 @@ export const FileUploadDialog = ({ isOpen, onClose, onUploadSuccess, currentFold
                             <p className="font-medium truncate text-sm">{file.name}</p>
                             <p className="text-xs text-muted-foreground">
                               {formatFileSize(file.size)}
+                              {shouldUseDirectUpload(file.size) && (
+                                <span className="ml-2 text-primary">• Direct S3 upload</span>
+                              )}
                             </p>
                           </div>
                         </div>
@@ -361,7 +404,11 @@ export const FileUploadDialog = ({ isOpen, onClose, onUploadSuccess, currentFold
               {uploading && !batchMode && (
                 <div className="mt-4 space-y-2 glass-card border-primary/20 p-4 rounded-lg">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Uploading...</span>
+                    <span className="text-muted-foreground">
+                      {selectedFiles[0] && shouldUseDirectUpload(selectedFiles[0].size) 
+                        ? 'Uploading directly to S3...' 
+                        : 'Uploading...'}
+                    </span>
                     <span className="font-medium">{uploadProgress}%</span>
                   </div>
                   <div className="w-full bg-primary/10 rounded-full h-2">
@@ -370,6 +417,11 @@ export const FileUploadDialog = ({ isOpen, onClose, onUploadSuccess, currentFold
                       style={{ width: `${uploadProgress}%` }}
                     />
                   </div>
+                  {selectedFiles[0] && shouldUseDirectUpload(selectedFiles[0].size) && (
+                    <p className="text-xs text-muted-foreground text-center">
+                      Using direct S3 upload for better performance
+                    </p>
+                  )}
                 </div>
               )}
 
