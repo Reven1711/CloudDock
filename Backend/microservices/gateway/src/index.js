@@ -9,17 +9,34 @@ dotenv.config();
 const app = express();
 
 // Configure CORS
-const corsOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173").split(",");
+const corsOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173")
+  .split(",")
+  .map(origin => origin.trim()); // Trim whitespace
+
+console.log("🔐 CORS Origins configured:", corsOrigins);
+
 app.use(
   cors({
-    origin: corsOrigins,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+      
+      if (corsOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.warn(`⚠️ CORS blocked origin: ${origin}`);
+        callback(null, false);
+      }
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+    exposedHeaders: ["Content-Length", "Content-Type"],
+    maxAge: 86400, // 24 hours
   })
 );
 
-// Handle OPTIONS preflight requests
+// Handle OPTIONS preflight requests explicitly
 app.options("*", cors());
 
 const proxy = httpProxy.createProxyServer({ changeOrigin: true });
