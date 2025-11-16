@@ -111,7 +111,7 @@ export async function processFilesParallel(files, uploadContext) {
         (sum, file) => sum + file.size,
         0
       );
-      await incrementStorageUsage(orgId, totalSize);
+      await incrementStorageUsage(orgId, totalSize, successfulUploads.length);
 
       // Step 7: Trigger virus scans in parallel (fire and forget)
       const virusScanPromises = successfulUploads.map((upload) =>

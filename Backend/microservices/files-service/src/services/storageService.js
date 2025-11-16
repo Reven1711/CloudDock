@@ -58,7 +58,7 @@ export const getStorageQuota = async (orgId) => {
 /**
  * Update storage usage after file upload
  */
-export const incrementStorageUsage = async (orgId, fileSize) => {
+export const incrementStorageUsage = async (orgId, fileSize, fileCount = 1) => {
   try {
     const quota = await StorageQuotaModel.findOne({ orgId });
 
@@ -67,7 +67,7 @@ export const incrementStorageUsage = async (orgId, fileSize) => {
     }
 
     quota.usedStorage += fileSize;
-    quota.fileCount += 1;
+    quota.fileCount += fileCount;
     quota.lastCalculated = new Date();
 
     await quota.save();

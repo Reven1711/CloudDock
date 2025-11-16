@@ -7,6 +7,7 @@ import {
   getOrganizationFiles,
   deleteFile,
   getStorageInfo,
+  recalculateStorage,
   getFileDetails,
 } from "../controllers/fileController.js";
 import {
@@ -15,6 +16,11 @@ import {
   getWorkerPoolStats,
   uploadWithCustomParallelism,
 } from "../controllers/batchFileController.js";
+import {
+  generatePresignedUploadUrl,
+  confirmFileUpload,
+  cancelFileUpload,
+} from "../controllers/presignedUploadController.js";
 import { handleVirusScanCallback } from "../services/virusScanService.js";
 
 const router = express.Router();
@@ -29,7 +35,12 @@ const upload = multer({
   },
 });
 
-// Single file upload
+// Direct S3 Upload (for files > 32MB to bypass Cloud Run limit)
+router.post("/upload/presigned", generatePresignedUploadUrl); // Get presigned URL
+router.post("/upload/confirm", confirmFileUpload); // Confirm upload complete
+router.post("/upload/cancel", cancelFileUpload); // Cancel upload
+
+// Single file upload (for files < 32MB)
 router.post("/upload", upload.single("file"), uploadFile);
 
 // Batch upload - Multiple files in parallel using Worker Threads
@@ -59,6 +70,9 @@ router.get("/org/:orgId", getOrganizationFiles);
 
 // Get storage information for organization
 router.get("/storage/:orgId", getStorageInfo);
+
+// Recalculate storage usage for organization
+router.post("/storage/:orgId/recalculate", recalculateStorage);
 
 // Virus scan callback (from Lambda)
 router.post("/virus-scan-callback", handleVirusScanCallback);
