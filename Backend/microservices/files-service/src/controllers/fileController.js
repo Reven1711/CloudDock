@@ -9,10 +9,52 @@ import {
   incrementStorageUsage,
   decrementStorageUsage,
   getStorageQuota,
+  recalculateStorageUsage,
 } from "../services/storageService.js";
 import { scanFileForVirus } from "../services/virusScanService.js";
 import { v4 as uuidv4 } from "uuid";
 import { MAX_FILE_SIZE } from "../config/aws.js";
+
+/**
+ * Calculate the total size of a folder (including all files and subfolders recursively)
+ */
+const calculateFolderSize = async (orgId, folderName, parentFolder) => {
+  try {
+    // Construct the folder path
+    const folderPath =
+      parentFolder === "/" ? `/${folderName}/` : `${parentFolder}${folderName}/`;
+
+    // Find all files and folders within this folder path (recursively)
+    // This regex will match the folder path and any nested paths
+    const files = await FileModel.find({
+      orgId,
+      folder: { $regex: `^${folderPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` },
+      isDeleted: false,
+      mimeType: { $ne: "application/vnd.clouddock.folder" }, // Exclude folders themselves
+    });
+
+    // Also get files directly in this folder
+    const directFiles = await FileModel.find({
+      orgId,
+      folder: folderPath,
+      isDeleted: false,
+      mimeType: { $ne: "application/vnd.clouddock.folder" },
+    });
+
+    // Combine and deduplicate
+    const allFiles = [...directFiles, ...files];
+    const uniqueFiles = Array.from(new Set(allFiles.map(f => f.fileId)))
+      .map(id => allFiles.find(f => f.fileId === id));
+
+    // Sum up all file sizes
+    const totalSize = uniqueFiles.reduce((sum, file) => sum + (file.size || 0), 0);
+
+    return totalSize;
+  } catch (error) {
+    console.error("Error calculating folder size:", error);
+    return 0;
+  }
+};
 
 /**
  * Upload a file
@@ -284,19 +326,37 @@ export const getOrganizationFiles = async (req, res) => {
       isDeleted: false,
     });
 
+    // Calculate folder sizes for all folders in the list
+    const filesWithCalculatedSizes = await Promise.all(
+      files.map(async (file) => {
+        let calculatedSize = file.size;
+        
+        // If it's a folder, calculate its total size
+        if (file.mimeType === "application/vnd.clouddock.folder") {
+          calculatedSize = await calculateFolderSize(
+            file.orgId,
+            file.fileName,
+            file.folder
+          );
+        }
+
+        return {
+          fileId: file.fileId,
+          fileName: file.fileName,
+          originalName: file.originalName,
+          size: calculatedSize,
+          mimeType: file.mimeType,
+          folder: file.folder,
+          uploadedBy: file.uploadedBy,
+          uploadedAt: file.createdAt,
+          virusScanStatus: file.virusScanStatus,
+        };
+      })
+    );
+
     res.json({
       success: true,
-      files: files.map((file) => ({
-        fileId: file.fileId,
-        fileName: file.fileName,
-        originalName: file.originalName,
-        size: file.size,
-        mimeType: file.mimeType,
-        folder: file.folder,
-        uploadedBy: file.uploadedBy,
-        uploadedAt: file.createdAt,
-        virusScanStatus: file.virusScanStatus,
-      })),
+      files: filesWithCalculatedSizes,
       pagination: {
         currentPage: parseInt(page),
         totalPages: Math.ceil(totalFiles / limit),
@@ -382,6 +442,40 @@ export const getStorageInfo = async (req, res) => {
     console.error("Get storage info error:", error);
     res.status(500).json({
       error: "Failed to retrieve storage information",
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * Recalculate storage usage for organization
+ */
+export const recalculateStorage = async (req, res) => {
+  try {
+    const { orgId } = req.params;
+
+    if (!orgId) {
+      return res.status(400).json({ error: "Organization ID is required" });
+    }
+
+    const quota = await recalculateStorageUsage(orgId);
+
+    res.json({
+      success: true,
+      message: "Storage usage recalculated successfully",
+      storage: {
+        orgId: quota.orgId,
+        totalQuota: quota.totalQuota,
+        usedStorage: quota.usedStorage,
+        fileCount: quota.fileCount,
+        availableStorage: quota.getAvailableStorage(),
+        usagePercentage: quota.getUsagePercentage(),
+      },
+    });
+  } catch (error) {
+    console.error("Recalculate storage error:", error);
+    res.status(500).json({
+      error: "Failed to recalculate storage usage",
       message: error.message,
     });
   }
