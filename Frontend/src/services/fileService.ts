@@ -120,12 +120,36 @@ export const uploadFile = async (data: FileUploadData): Promise<UploadResponse> 
 /**
  * Upload multiple files in parallel using Worker Threads
  * This provides significant performance improvements for batch uploads
+ * 
+ * IMPORTANT: Automatically uses direct S3 upload if total size > 30MB
+ * to bypass Cloud Run 32MB request body limit
  */
 export const uploadMultipleFiles = async (
   options: BatchUploadOptions
 ): Promise<BatchUploadResponse> => {
   const { files, orgId, userId, userName, userEmail, folder, parallelism } = options;
 
+  // Calculate total size
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+  const CLOUD_RUN_LIMIT = 30 * 1024 * 1024; // 30MB (safe threshold below 32MB)
+
+  console.log(`📊 Batch upload: ${files.length} files, total size: ${(totalSize / 1024 / 1024).toFixed(2)} MB`);
+
+  // If total size exceeds Cloud Run limit, use direct S3 upload for each file
+  if (totalSize > CLOUD_RUN_LIMIT) {
+    console.log(`⚠️ Total size (${(totalSize / 1024 / 1024).toFixed(2)} MB) exceeds Cloud Run limit. Using direct S3 uploads...`);
+    
+    return await uploadMultipleFilesDirect({
+      files,
+      orgId,
+      userId,
+      userName,
+      userEmail,
+      folder,
+    });
+  }
+
+  // Standard batch upload for smaller total sizes
   const formData = new FormData();
   
   // Append all files
@@ -158,6 +182,96 @@ export const uploadMultipleFiles = async (
   });
 
   return response.data;
+};
+
+/**
+ * Upload multiple files using direct S3 upload (bypasses Cloud Run limit)
+ * Each file is uploaded individually using presigned URLs
+ */
+const uploadMultipleFilesDirect = async (
+  options: Omit<BatchUploadOptions, 'parallelism'>
+): Promise<BatchUploadResponse> => {
+  const { files, orgId, userId, userName, userEmail, folder } = options;
+  
+  const startTime = Date.now();
+  const uploadedFiles: any[] = [];
+  const errors: any[] = [];
+
+  console.log(`🚀 Starting direct S3 upload for ${files.length} files...`);
+
+  // Upload files in parallel (with limit to avoid overwhelming the system)
+  const CONCURRENT_UPLOADS = 3; // Upload 3 files at a time
+  
+  for (let i = 0; i < files.length; i += CONCURRENT_UPLOADS) {
+    const batch = files.slice(i, i + CONCURRENT_UPLOADS);
+    
+    await Promise.all(
+      batch.map(async (file) => {
+        try {
+          console.log(`📤 Uploading ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB) via direct S3...`);
+          
+          // Import uploadLargeFile dynamically to avoid circular dependency
+          const { uploadLargeFile, shouldUseDirectUpload } = await import('./directUploadService');
+          
+          const { fileId } = await uploadLargeFile(
+            file,
+            {
+              orgId,
+              userId,
+              userName,
+              userEmail,
+              folder,
+            }
+          );
+
+          uploadedFiles.push({
+            fileId,
+            fileName: file.name,
+            originalName: file.name,
+            size: file.size,
+            mimeType: file.type || 'application/octet-stream',
+            virusScanStatus: 'pending',
+          });
+
+          console.log(`✅ ${file.name} uploaded successfully`);
+        } catch (error: any) {
+          console.error(`❌ Failed to upload ${file.name}:`, error);
+          errors.push({
+            fileName: file.name,
+            error: error.response?.data?.message || error.message || 'Upload failed',
+          });
+        }
+      })
+    );
+  }
+
+  const endTime = Date.now();
+  const processingTime = `${((endTime - startTime) / 1000).toFixed(2)}s`;
+
+  return {
+    success: errors.length === 0,
+    message: `Uploaded ${uploadedFiles.length} of ${files.length} files using direct S3 upload`,
+    statistics: {
+      totalFiles: files.length,
+      successful: uploadedFiles.length,
+      failed: errors.length,
+      processingTime,
+    },
+    uploadedFiles,
+    errors,
+    storageInfo: {
+      // Storage info will be updated, but we don't have it immediately
+      // The confirm endpoint updates it for each file
+      orgId,
+      totalQuota: 0,
+      usedStorage: 0,
+      availableStorage: 0,
+      fileCount: 0,
+      usagePercentage: 0,
+      isPaidPlan: false,
+      isQuotaExceeded: false,
+    },
+  };
 };
 
 /**
