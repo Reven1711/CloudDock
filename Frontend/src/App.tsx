@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { TenantProvider } from "./contexts/TenantContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ThemeApplier } from "./components/ThemeApplier";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { PublicRoute } from "./components/PublicRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -27,13 +29,17 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/onboarding" element={<Onboarding />} />
-              <Route path="/admin/dashboard" element={<AdminDashboard />} />
-              <Route path="/admin" element={<Admin />} />
-              <Route path="/payment/success" element={<PaymentSuccess />} />
-              <Route path="/dashboard/*" element={<Dashboard />} />
+              {/* Public routes - redirect to dashboard if already logged in */}
+              <Route path="/" element={<PublicRoute><Index /></PublicRoute>} />
+              <Route path="/auth" element={<PublicRoute><Auth /></PublicRoute>} />
+              
+              {/* Protected routes - require authentication */}
+              <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+              <Route path="/admin/dashboard" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+              <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+              <Route path="/payment/success" element={<ProtectedRoute><PaymentSuccess /></ProtectedRoute>} />
+              <Route path="/dashboard/*" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
