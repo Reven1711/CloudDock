@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
 import { uploadFile, uploadMultipleFiles, formatFileSize } from '@/services/fileService';
-import { uploadLargeFile, shouldUseDirectUpload, getUploadMethodDescription } from '@/services/directUploadService';
+import { uploadLargeFile } from '@/services/directUploadService';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -49,11 +49,12 @@ export const FileUploadDialog = ({ isOpen, onClose, onUploadSuccess, currentFold
     const validFiles: File[] = [];
 
     // Validate files
+    const MAX_FILE_SIZE = 1 * 1024 * 1024 * 1024; // 1 GB
     for (const file of fileList) {
-      if (file.size > 100 * 1024 * 1024) {
+      if (file.size > MAX_FILE_SIZE) {
         toast({
           title: "File too large",
-          description: `${file.name} exceeds 100 MB limit`,
+          description: `${file.name} exceeds 1 GB limit`,
           variant: "destructive",
         });
         continue;
@@ -149,58 +150,30 @@ export const FileUploadDialog = ({ isOpen, onClose, onUploadSuccess, currentFold
           console.error('Upload errors:', result.errors);
         }
       } else {
-        // Single file upload
+        // Single file upload - always use direct S3 upload
         const file = selectedFiles[0];
-        const useDirectUpload = shouldUseDirectUpload(file.size);
-
-        if (useDirectUpload) {
-          // Use direct S3 upload for large files (> 30MB)
-          console.log(`🚀 Using direct S3 upload for ${file.name} (${formatFileSize(file.size)})`);
-          
-          await uploadLargeFile(
-            file,
-            {
-              orgId: user.tenantId,
-              userId: user.id,
-              userName: user.name,
-              userEmail: user.email,
-              folder: currentFolder,
-            },
-            (progress) => {
-              setUploadProgress(progress);
-            }
-          );
-
-          setUploadStatus('success');
-          
-          toast({
-            title: "Upload successful!",
-            description: `${file.name} has been uploaded successfully via direct S3 upload.`,
-          });
-        } else {
-          // Use standard upload for small files (< 30MB)
-          const progressInterval = setInterval(() => {
-            setUploadProgress((prev) => Math.min(prev + 10, 90));
-          }, 200);
-
-          await uploadFile({
-            file: file,
+        console.log(`🚀 Using direct S3 upload for ${file.name} (${formatFileSize(file.size)})`);
+        
+        await uploadLargeFile(
+          file,
+          {
             orgId: user.tenantId,
             userId: user.id,
             userName: user.name,
             userEmail: user.email,
             folder: currentFolder,
-          });
+          },
+          (progress) => {
+            setUploadProgress(progress);
+          }
+        );
 
-          clearInterval(progressInterval);
-          setUploadProgress(100);
-          setUploadStatus('success');
-
-          toast({
-            title: "Upload successful!",
-            description: `${file.name} has been uploaded successfully.`,
-          });
-        }
+        setUploadStatus('success');
+        
+        toast({
+          title: "Upload successful!",
+          description: `${file.name} has been uploaded successfully.`,
+        });
       }
 
       // Call success callback
@@ -257,14 +230,9 @@ export const FileUploadDialog = ({ isOpen, onClose, onUploadSuccess, currentFold
           </DialogTitle>
           <DialogDescription>
             {batchMode ? (
-              'Upload multiple files in parallel using Worker Threads for optimal performance. Maximum 100 files, 100 MB each.'
+              'Upload multiple files in parallel for optimal performance. Maximum 100 files, 1 GB each.'
             ) : (
-              <>
-                Select a file to upload. <strong>Maximum size: 100 MB.</strong>
-                <span className="block mt-1 text-xs text-muted-foreground">
-                  💡 Files over 30MB use direct S3 upload for better reliability
-                </span>
-              </>
+              'Select a file to upload. Maximum size: 1 GB.'
             )}
             {currentFolder === '/' ? (
               <span className="block mt-1">Uploading to: <strong>Root folder</strong></span>
@@ -378,9 +346,6 @@ export const FileUploadDialog = ({ isOpen, onClose, onUploadSuccess, currentFold
                             <p className="font-medium truncate text-sm">{file.name}</p>
                             <p className="text-xs text-muted-foreground">
                               {formatFileSize(file.size)}
-                              {shouldUseDirectUpload(file.size) && (
-                                <span className="ml-2 text-primary">• Direct S3 upload</span>
-                              )}
                             </p>
                           </div>
                         </div>
@@ -404,11 +369,7 @@ export const FileUploadDialog = ({ isOpen, onClose, onUploadSuccess, currentFold
               {uploading && !batchMode && (
                 <div className="mt-4 space-y-2 glass-card border-primary/20 p-4 rounded-lg">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      {selectedFiles[0] && shouldUseDirectUpload(selectedFiles[0].size) 
-                        ? 'Uploading directly to S3...' 
-                        : 'Uploading...'}
-                    </span>
+                    <span className="text-muted-foreground">Uploading to S3...</span>
                     <span className="font-medium">{uploadProgress}%</span>
                   </div>
                   <div className="w-full bg-primary/10 rounded-full h-2">
@@ -417,11 +378,6 @@ export const FileUploadDialog = ({ isOpen, onClose, onUploadSuccess, currentFold
                       style={{ width: `${uploadProgress}%` }}
                     />
                   </div>
-                  {selectedFiles[0] && shouldUseDirectUpload(selectedFiles[0].size) && (
-                    <p className="text-xs text-muted-foreground text-center">
-                      Using direct S3 upload for better performance
-                    </p>
-                  )}
                 </div>
               )}
 

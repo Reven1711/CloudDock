@@ -118,70 +118,29 @@ export const uploadFile = async (data: FileUploadData): Promise<UploadResponse> 
 };
 
 /**
- * Upload multiple files in parallel using Worker Threads
- * This provides significant performance improvements for batch uploads
- * 
- * IMPORTANT: Automatically uses direct S3 upload if total size > 30MB
- * to bypass Cloud Run 32MB request body limit
+ * Upload multiple files in parallel using direct S3 upload
+ * All files are uploaded directly to S3 using presigned URLs
+ * This bypasses Cloud Run size limits and provides better performance
  */
 export const uploadMultipleFiles = async (
   options: BatchUploadOptions
 ): Promise<BatchUploadResponse> => {
-  const { files, orgId, userId, userName, userEmail, folder, parallelism } = options;
+  const { files, orgId, userId, userName, userEmail, folder } = options;
 
-  // Calculate total size
+  // Calculate total size for logging
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
-  const CLOUD_RUN_LIMIT = 30 * 1024 * 1024; // 30MB (safe threshold below 32MB)
-
   console.log(`📊 Batch upload: ${files.length} files, total size: ${(totalSize / 1024 / 1024).toFixed(2)} MB`);
-
-  // If total size exceeds Cloud Run limit, use direct S3 upload for each file
-  if (totalSize > CLOUD_RUN_LIMIT) {
-    console.log(`⚠️ Total size (${(totalSize / 1024 / 1024).toFixed(2)} MB) exceeds Cloud Run limit. Using direct S3 uploads...`);
-    
-    return await uploadMultipleFilesDirect({
-      files,
-      orgId,
-      userId,
-      userName,
-      userEmail,
-      folder,
-    });
-  }
-
-  // Standard batch upload for smaller total sizes
-  const formData = new FormData();
+  console.log(`🚀 Using direct S3 upload for all files...`);
   
-  // Append all files
-  files.forEach((file) => {
-    formData.append('files', file);
+  // Always use direct S3 upload for batch uploads
+  return await uploadMultipleFilesDirect({
+    files,
+    orgId,
+    userId,
+    userName,
+    userEmail,
+    folder,
   });
-  
-  // Append metadata
-  formData.append('orgId', orgId);
-  formData.append('userId', userId);
-  formData.append('userName', userName);
-  formData.append('userEmail', userEmail);
-  if (folder) {
-    formData.append('folder', folder);
-  }
-  if (parallelism) {
-    formData.append('parallelism', parallelism.toString());
-  }
-
-  const endpoint = parallelism 
-    ? `${API_BASE_URL}/files/upload/parallel` 
-    : `${API_BASE_URL}/files/upload/batch`;
-
-  const response = await axios.post(endpoint, formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-    // Extended timeout for batch uploads
-    timeout: 300000, // 5 minutes
-  });
-
-  return response.data;
 };
 
 /**

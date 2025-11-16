@@ -21,7 +21,7 @@ export const S3_REGION = process.env.AWS_REGION || "us-east-1";
 
 // Storage Limits
 export const FREE_STORAGE_LIMIT = 1 * 1024 * 1024 * 1024; // 1 GB in bytes
-export const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB per file
+export const MAX_FILE_SIZE = 1 * 1024 * 1024 * 1024; // 1 GB per file
 
 // Virus Scanning Configuration
 export const LAMBDA_FUNCTION_NAME =
