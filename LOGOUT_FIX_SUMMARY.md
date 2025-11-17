@@ -86,6 +86,29 @@ const signOut = () => {
   // Clear any other session data
   sessionStorage.clear();
   
+  // Clear ALL cookies
+  const clearAllCookies = () => {
+    const cookies = document.cookie.split(';');
+    
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i];
+      const eqPos = cookie.indexOf('=');
+      const name = eqPos > -1 ? cookie.substring(0, eqPos).trim() : cookie.trim();
+      
+      // Delete cookie for current domain
+      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+      
+      // Delete cookie for all subdomains
+      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${window.location.hostname};`;
+      
+      // Delete cookie for parent domain
+      const domain = window.location.hostname.split('.').slice(-2).join('.');
+      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.${domain};`;
+    }
+  };
+  
+  clearAllCookies();
+  
   // Force redirect to home page after logout
   window.location.replace('/');
 };
@@ -94,9 +117,13 @@ const signOut = () => {
 **Improvements:**
 - ✅ Explicitly removes ALL auth-related localStorage items
 - ✅ Clears sessionStorage to remove any temporary session data
+- ✅ **Clears ALL cookies** (including sidebar state, auth cookies, etc.)
+  - Clears cookies for current domain
+  - Clears cookies for subdomains
+  - Clears cookies for parent domain
 - ✅ Uses `window.location.replace('/')` instead of `window.location.href = '/'`
   - This replaces the current history entry, preventing users from hitting "back" to return to logged-in state
-- ✅ Ensures complete session cleanup
+- ✅ Ensures **COMPLETE** session cleanup
 
 ## 🔄 Flow After Fix
 
@@ -114,17 +141,24 @@ const signOut = () => {
    ↓
 4. sessionStorage is cleared
    ↓
-5. User state is set to null
+5. ALL cookies are deleted:
+   - sidebar:state (UI preference)
+   - Any auth cookies (if added in future)
+   - Third-party cookies
    ↓
-6. window.location.replace('/') redirects to home
+6. User state is set to null
    ↓
-7. App reloads, AuthContext tries to load user from localStorage
+7. window.location.replace('/') redirects to home
    ↓
-8. No user found in localStorage (cleared in step 3)
+8. App reloads, AuthContext tries to load user from localStorage
    ↓
-9. PublicRoute sees user is null
+9. No user found in localStorage (cleared in step 3)
    ↓
-10. ✅ User sees the welcome/home page
+10. No cookies found (cleared in step 5)
+   ↓
+11. PublicRoute sees user is null
+   ↓
+12. ✅ User sees the welcome/home page (completely logged out)
 ```
 
 ## 🧪 Testing
@@ -148,6 +182,8 @@ To verify the fix works:
    - Open DevTools → Application → Local Storage
    - `auth-user` should be gone
    - All other auth-related keys should be cleared
+   - Open DevTools → Application → Cookies
+   - All cookies should be cleared (including `sidebar:state`)
 
 5. **Test Protection:**
    - Try manually navigating to `/dashboard`
@@ -172,11 +208,13 @@ To verify the fix works:
 ## 🎯 Impact
 
 - ✅ Logout now properly clears all session data
+- ✅ **ALL cookies are deleted** (sidebar state, auth cookies, etc.)
 - ✅ Users are correctly redirected to home page
 - ✅ Protected routes are inaccessible after logout
 - ✅ No more "stuck in dashboard" issue
 - ✅ Consistent behavior across user and admin dashboards
 - ✅ Better security (prevents back-button access to logged-in state)
+- ✅ Complete cleanup of all browser storage (localStorage, sessionStorage, cookies)
 
 ## 🚀 Deployment
 

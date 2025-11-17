@@ -199,6 +199,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Clear any other session data
     sessionStorage.clear();
     
+    // Clear ALL cookies
+    const clearAllCookies = () => {
+      const cookies = document.cookie.split(';');
+      
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i];
+        const eqPos = cookie.indexOf('=');
+        const name = eqPos > -1 ? cookie.substring(0, eqPos).trim() : cookie.trim();
+        
+        // Delete cookie for current domain
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+        
+        // Delete cookie for all subdomains
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${window.location.hostname};`;
+        
+        // Delete cookie for parent domain
+        const domain = window.location.hostname.split('.').slice(-2).join('.');
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.${domain};`;
+      }
+    };
+    
+    clearAllCookies();
+    
     // Force redirect to home page after logout
     window.location.replace('/');
   };
