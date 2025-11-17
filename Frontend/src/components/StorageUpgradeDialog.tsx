@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CreditCard, Package, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { createStorageCheckoutSession, calculateStoragePrice } from '@/services/billingService';
+import { createStorageCheckoutSession, getPricingConfig, getMinimumPurchaseGB } from '@/services/billingService';
 
 interface StorageUpgradeDialogProps {
   isOpen: boolean;
@@ -40,9 +40,31 @@ export const StorageUpgradeDialog = ({
   const [customStorage, setCustomStorage] = useState<string>('');
   const [useCustom, setUseCustom] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [pricing, setPricing] = useState<{ pricePerGB: number; minimumPurchaseGB: number; freeTierGB: number } | null>(null);
+  const [loadingPricing, setLoadingPricing] = useState(true);
+
+  // Fetch pricing config when dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      const fetchPricing = async () => {
+        setLoadingPricing(true);
+        try {
+          const config = await getPricingConfig();
+          setPricing(config);
+        } catch (error) {
+          console.error('Failed to load pricing:', error);
+          // Use defaults if fetch fails
+          setPricing({ pricePerGB: 0.2, minimumPurchaseGB: 3, freeTierGB: 1 });
+        } finally {
+          setLoadingPricing(false);
+        }
+      };
+      fetchPricing();
+    }
+  }, [isOpen]);
 
   const storageAmount = useCustom ? parseInt(customStorage) || 0 : selectedStorage;
-  const price = calculateStoragePrice(storageAmount);
+  const price = pricing ? storageAmount * pricing.pricePerGB : 0;
   const newQuota = currentQuota + storageAmount;
 
   const handleClose = () => {
@@ -54,7 +76,14 @@ export const StorageUpgradeDialog = ({
   };
 
   const handleCheckout = async () => {
-    const MINIMUM_STORAGE_GB = 3;
+    if (!pricing) {
+      toast({
+        title: 'Loading pricing',
+        description: 'Please wait while we load pricing information',
+        variant: 'default',
+      });
+      return;
+    }
     
     if (storageAmount <= 0) {
       toast({
@@ -65,10 +94,10 @@ export const StorageUpgradeDialog = ({
       return;
     }
 
-    if (storageAmount < MINIMUM_STORAGE_GB) {
+    if (storageAmount < pricing.minimumPurchaseGB) {
       toast({
         title: 'Storage amount too small',
-        description: `Minimum storage purchase is ${MINIMUM_STORAGE_GB} GB`,
+        description: `Minimum storage purchase is ${pricing.minimumPurchaseGB} GB`,
         variant: 'destructive',
       });
       return;
@@ -105,9 +134,19 @@ export const StorageUpgradeDialog = ({
             Upgrade Storage
           </DialogTitle>
           <DialogDescription>
-            Add more storage to your organization. Storage is billed monthly at $0.20 per GB.
-            <br />
-            <span className="text-xs text-muted-foreground">Minimum purchase: 3 GB ($0.60)</span>
+            {loadingPricing ? (
+              'Loading pricing information...'
+            ) : pricing ? (
+              <>
+                Add more storage to your organization. Storage is billed monthly at ${pricing.pricePerGB.toFixed(2)} per GB.
+                <br />
+                <span className="text-xs text-muted-foreground">
+                  Minimum purchase: {pricing.minimumPurchaseGB} GB (${(pricing.minimumPurchaseGB * pricing.pricePerGB).toFixed(2)})
+                </span>
+              </>
+            ) : (
+              'Add more storage to your organization.'
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -138,7 +177,7 @@ export const StorageUpgradeDialog = ({
                 >
                   <div className="text-lg font-semibold">{option.label}</div>
                   <div className="text-xs text-muted-foreground">
-                    ${calculateStoragePrice(option.value).toFixed(2)}/mo
+                    {pricing ? `$${(option.value * pricing.pricePerGB).toFixed(2)}/mo` : 'Loading...'}
                   </div>
                 </button>
               ))}

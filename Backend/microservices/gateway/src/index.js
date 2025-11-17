@@ -9,7 +9,7 @@ dotenv.config();
 const app = express();
 
 // Configure CORS
-const corsOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173")
+const corsOrigins = (process.env.CORS_ORIGINS || "http://localhost:8080,http://localhost:5173")
   .split(",")
   .map(origin => origin.trim()); // Trim whitespace
 

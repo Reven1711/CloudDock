@@ -4,6 +4,7 @@ import { connectMongo } from "../../../src/db/connection.js";
 import { ensureCollections } from "../../../src/db/ensure.js";
 import { env } from "../../../src/config/env.js";
 import billingRoutes from "./routes/billingRoutes.js";
+import { SystemConfigModel } from "./models/SystemConfig.js";
 
 const PORT = Number(process.env.BILLING_SERVICE_PORT || 4005);
 
@@ -29,6 +30,10 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 export async function startBillingService() {
   await connectMongo();
   await ensureCollections("billing");
+  
+  // Initialize default system configurations
+  await SystemConfigModel.initializeDefaults();
+  
   app.listen(PORT, () => console.log(`[billing] listening on :${PORT}`));
 }
 

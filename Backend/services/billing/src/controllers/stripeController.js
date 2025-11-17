@@ -3,11 +3,11 @@ import { v4 as uuidv4 } from "uuid";
 import { StoragePurchaseModel } from "../models/StoragePurchase.js";
 import { OrganizationModel } from "../../../org/src/models/Organization.js";
 import { StorageQuotaModel } from "../../../files/src/models/StorageQuota.js";
+import { getPricingConfigs, getConfigValue } from "../services/configService.js";
 
 // Initialize Stripe with your secret key
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
-const PRICE_PER_GB = 0.2; // $0.20 per GB per month
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
 /**
@@ -23,13 +23,27 @@ export const createCheckoutSession = async (req, res) => {
       });
     }
 
+    // Get pricing config from database
+    const pricingConfig = await getPricingConfigs();
+    const pricePerGB = pricingConfig.pricePerGB;
+    const minStorageGB = pricingConfig.minimumPurchaseGB;
+
+    console.log(`💰 Using pricing config: $${pricePerGB}/GB, Min: ${minStorageGB} GB`);
+
+    if (storageGB < minStorageGB) {
+      return res.status(400).json({
+        error: `Minimum storage purchase is ${minStorageGB} GB`,
+        minimum: minStorageGB,
+      });
+    }
+
     // Check if organization exists
     const organization = await OrganizationModel.findOne({ orgId });
     if (!organization) {
       return res.status(404).json({ error: "Organization not found" });
     }
 
-    const priceUSD = storageGB * PRICE_PER_GB;
+    const priceUSD = storageGB * pricePerGB;
     const purchaseId = uuidv4();
 
     console.log("🔧 Creating Stripe checkout session...");

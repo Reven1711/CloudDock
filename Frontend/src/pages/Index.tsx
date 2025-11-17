@@ -1,4 +1,4 @@
-import { Cloud, Shield, Zap, Users, ArrowRight, Check } from 'lucide-react';
+import { Cloud, Zap, Users, ArrowRight, Check, Palette } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 
@@ -7,9 +7,9 @@ const Index = () => {
 
   const features = [
     {
-      icon: Shield,
-      title: 'Enterprise Security',
-      description: 'Bank-level encryption and advanced security protocols to keep your data safe.',
+      icon: Palette,
+      title: 'Customizable UI',
+      description: 'Customize the UI to your brand with our customizable functionalities.',
     },
     {
       icon: Zap,
@@ -18,17 +18,17 @@ const Index = () => {
     },
     {
       icon: Users,
-      title: 'Team Collaboration',
-      description: 'Share files, manage permissions, and collaborate seamlessly with your team.',
+      title: 'Multi-Tenant',
+      description: 'Manage multiple tenants with different branding and settings.',
     },
   ];
 
   const benefits = [
     'Unlimited file storage',
-    'Advanced file sharing',
-    'Real-time collaboration',
+    'Multi-Tenant',
+    'Customizable UI',
     'Custom branding',
-    '99.9% uptime SLA',
+    'Microservices architecture',
     '24/7 support',
   ];
 
@@ -86,8 +86,7 @@ const Index = () => {
           </h1>
 
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Multi-tenant cloud storage SaaS with customizable branding, powerful file management,
-            and enterprise-grade security.
+            Multi-tenant cloud storage SaaS with customizable branding and powerful file management
           </p>
 
           <div className="flex items-center justify-center gap-4">
@@ -186,7 +185,7 @@ const Index = () => {
       {/* Footer */}
       <footer className="glass-card border-t border-white/10 py-8">
         <div className="container mx-auto px-6 text-center text-sm text-muted-foreground">
-          <p>© 2024 CloudDock. All rights reserved.</p>
+          <p>© 2025 CloudDock. All rights reserved.</p>
         </div>
       </footer>
     </div>

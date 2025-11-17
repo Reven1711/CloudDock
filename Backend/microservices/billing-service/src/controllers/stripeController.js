@@ -3,11 +3,11 @@ import { v4 as uuidv4 } from "uuid";
 import { StoragePurchaseModel } from "../models/StoragePurchase.js";
 import { OrganizationModel } from "../models/Organization.js";
 import { StorageQuotaModel } from "../models/StorageQuota.js";
+import { getPricingConfigs, getConfigValue } from "../services/configService.js";
 
 // Initialize Stripe with your secret key
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
-const PRICE_PER_GB = 0.2; // $0.20 per GB per month
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
 /**
@@ -15,6 +15,15 @@ const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
  */
 export const createCheckoutSession = async (req, res) => {
   try {
+    // Check if Stripe is properly configured
+    if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY === "") {
+      console.error("❌ STRIPE_SECRET_KEY is not configured");
+      return res.status(503).json({
+        error: "Payment service is not configured",
+        message: "STRIPE_SECRET_KEY is not set. Please configure Stripe to enable payments.",
+      });
+    }
+
     const { orgId, storageGB } = req.body;
 
     if (!orgId || !storageGB || storageGB <= 0) {
@@ -23,8 +32,13 @@ export const createCheckoutSession = async (req, res) => {
       });
     }
 
-    // Ensure minimum purchase meets Stripe's $0.50 minimum
-    const minStorageGB = 3; // 3 GB * $0.20 = $0.60 (meets Stripe minimum)
+    // Get pricing config from database
+    const pricingConfig = await getPricingConfigs();
+    const pricePerGB = pricingConfig.pricePerGB;
+    const minStorageGB = pricingConfig.minimumPurchaseGB;
+
+    console.log(`💰 Using pricing config: $${pricePerGB}/GB, Min: ${minStorageGB} GB`);
+
     if (storageGB < minStorageGB) {
       return res.status(400).json({
         error: `Minimum storage purchase is ${minStorageGB} GB`,
@@ -38,11 +52,26 @@ export const createCheckoutSession = async (req, res) => {
       return res.status(404).json({ error: "Organization not found" });
     }
 
-    const priceUSD = storageGB * PRICE_PER_GB;
+    const priceUSD = storageGB * pricePerGB;
+    
+    // Stripe minimum charge is $0.50 USD (50 cents)
+    const STRIPE_MINIMUM_CHARGE_USD = 0.50;
+    if (priceUSD < STRIPE_MINIMUM_CHARGE_USD) {
+      const minGBForStripe = Math.ceil(STRIPE_MINIMUM_CHARGE_USD / pricePerGB);
+      return res.status(400).json({
+        error: `Purchase amount $${priceUSD.toFixed(2)} is below Stripe's minimum charge of $${STRIPE_MINIMUM_CHARGE_USD}`,
+        minimum: minGBForStripe,
+        minimumCharge: STRIPE_MINIMUM_CHARGE_USD,
+        currentAmount: priceUSD,
+      });
+    }
+    
     const purchaseId = uuidv4();
 
     console.log("🔧 Creating Stripe checkout session...");
     console.log("   - FRONTEND_URL:", FRONTEND_URL);
+    console.log("   - Price USD:", priceUSD);
+    console.log("   - Price in cents:", Math.round(priceUSD * 100));
 
     // Create a Stripe checkout session
     const session = await stripe.checkout.sessions.create({

@@ -4,6 +4,8 @@ import dotenv from "dotenv";
 import { connectMongo } from "./config/db.js";
 import { ensureCollections } from "./config/ensure.js";
 import billingRoutes from "./routes/billingRoutes.js";
+import { SystemConfigModel } from "./models/SystemConfig.js";
+import { PlatformAdminModel } from "./models/PlatformAdmin.js";
 
 // Load environment variables
 dotenv.config();
@@ -36,6 +38,12 @@ async function startBillingService() {
     
     await ensureCollections();
     console.log("✅ Collections ensured");
+    
+    // Initialize default system configurations
+    await SystemConfigModel.initializeDefaults();
+    
+    // Initialize default platform admin
+    await PlatformAdminModel.initializeDefaultAdmin();
     
     if (!process.env.STRIPE_SECRET_KEY) {
       console.warn("⚠️  WARNING: STRIPE_SECRET_KEY not set - payment features will not work");

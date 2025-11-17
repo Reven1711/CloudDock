@@ -516,7 +516,10 @@ export const formatFileSize = (bytes: number): string => {
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+  // Use more precision for GB and TB (3 decimals) for better accuracy
+  const decimals = (i >= 3) ? 3 : 2; // GB (index 3) and TB (index 4) use 3 decimals
+
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${sizes[i]}`;
 };
 
 /**
