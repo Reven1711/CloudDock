@@ -26,6 +26,7 @@ interface AuthContextType {
   signUpUser: (args: { tenantId: string; name: string; email: string; password: string }) => Promise<AuthUser>;
   approveUser: (userId: string) => Promise<void>;
   refresh: () => void;
+  checkApprovalStatus: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -188,6 +189,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  /**
+   * Check if user's approval status has changed on the backend
+   * and update the local session accordingly
+   */
+  const checkApprovalStatus = async () => {
+    if (!user || user.role === 'admin') {
+      return; // Admins are always approved, no need to check
+    }
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000'}/users/${user.id}`,
+        {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const isNowApproved = data.user?.status === 'active';
+        
+        // If approval status changed, update the session
+        if (isNowApproved !== user.approved) {
+          const updatedUser: AuthUser = {
+            ...user,
+            approved: isNowApproved,
+            role: isNowApproved ? 'user' : 'pending',
+          };
+          persistUser(updatedUser);
+          
+          // Notify user of approval (triggers re-render and shows success message)
+          if (isNowApproved && !user.approved) {
+            console.log('🎉 Your account has been approved! You can now upload files.');
+            // Trigger a custom event that Dashboard can listen to
+            window.dispatchEvent(new CustomEvent('userApproved'));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check approval status:', error);
+    }
+  };
+
   const signOut = () => {
     // Clear all auth-related data from localStorage
     persistUser(null);
@@ -235,6 +280,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signUpUser,
     approveUser,
     refresh,
+    checkApprovalStatus,
   }), [user, usage]);
 
   return (

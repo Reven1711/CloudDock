@@ -2,6 +2,7 @@ import express from "express";
 import {
   getAllUsers,
   getPendingUsers,
+  getUserById,
   approveUser,
   rejectUser,
 } from "../controllers/userController.js";
@@ -13,6 +14,9 @@ router.get("/org/:tenantId", getAllUsers);
 
 // Get pending users for an organization
 router.get("/pending/:tenantId", getPendingUsers);
+
+// Get user by ID (for checking approval status)
+router.get("/:userId", getUserById);
 
 // Approve a user
 router.post("/:userId/approve", approveUser);

@@ -50,6 +50,37 @@ export const getPendingUsers = async (req, res) => {
   }
 };
 
+export const getUserById = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const user = await AuthUserModel.findOne(
+      { userId },
+      { userId: 1, name: 1, email: 1, role: 1, status: 1, tenantId: 1, createdAt: 1, _id: 0 }
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({
+      success: true,
+      user: {
+        userId: user.userId,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        approved: user.status === "active",
+        tenantId: user.tenantId,
+        createdAt: user.createdAt,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 export const approveUser = async (req, res) => {
   try {
     const { userId } = req.params;

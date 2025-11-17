@@ -99,7 +99,7 @@ const Settings = () => {
 
 const Dashboard = () => {
   const { tenant, setTenant } = useTenant();
-  const { user, signOut } = useAuth();
+  const { user, signOut, checkApprovalStatus } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
@@ -118,6 +118,44 @@ const Dashboard = () => {
       navigate('/admin/dashboard');
     }
   }, [user, navigate]);
+
+  // Auto-check approval status for pending users
+  useEffect(() => {
+    if (!user || user.approved || user.role === 'admin') {
+      return; // Only check for pending users
+    }
+
+    // Check immediately on mount
+    checkApprovalStatus();
+
+    // Poll every 30 seconds while user is pending
+    const pollInterval = setInterval(() => {
+      checkApprovalStatus();
+    }, 30000); // 30 seconds
+
+    // Check when tab gains focus
+    const handleFocus = () => {
+      checkApprovalStatus();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    // Listen for approval event
+    const handleApproval = () => {
+      toast({
+        title: "🎉 Account Approved!",
+        description: "Your account has been approved! You can now upload files and folders.",
+        duration: 5000,
+      });
+    };
+    window.addEventListener('userApproved', handleApproval);
+
+    // Cleanup
+    return () => {
+      clearInterval(pollInterval);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('userApproved', handleApproval);
+    };
+  }, [user, checkApprovalStatus, toast]);
 
   // Fetch files from API
   const fetchFiles = async (folder: string = currentFolder) => {
@@ -427,8 +465,30 @@ const Dashboard = () => {
                 <div className="p-6">
           {/* Approval Notice for pending users */}
           {!user?.approved && (
-            <div className="glass-card rounded-2xl p-4 mb-4">
-              <p className="text-sm text-muted-foreground">Your account is pending admin approval. You can browse but uploading is disabled.</p>
+            <div className="glass-card rounded-2xl p-4 mb-4 border-l-4 border-yellow-500">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="animate-pulse">⏳</div>
+                  <div>
+                    <p className="text-sm font-medium">Account Pending Approval</p>
+                    <p className="text-xs text-muted-foreground">You can browse but uploading is disabled until an admin approves your account.</p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    checkApprovalStatus();
+                    toast({
+                      title: "Checking status...",
+                      description: "Verifying your approval status with the server.",
+                    });
+                  }}
+                  className="glass-card"
+                >
+                  🔄 Check Status
+                </Button>
+              </div>
             </div>
           )}
                   <div className="mb-6">
