@@ -12,6 +12,7 @@ interface FileItemCardProps {
   onDownload: (fileId: string, fileName: string) => void;
   onDelete: (fileId: string, fileName: string) => void;
   onFolderDelete: (fileId: string, folderName: string) => void;
+  onFolderDownload?: (fileId: string, folderName: string) => void;
   animationDelay: number;
 }
 
@@ -25,6 +26,7 @@ export const FileItemCard = ({
   onDownload,
   onDelete,
   onFolderDelete,
+  onFolderDownload,
   animationDelay,
 }: FileItemCardProps) => {
   const isFolder = file.mimeType === 'application/vnd.clouddock.folder';
@@ -102,17 +104,32 @@ export const FileItemCard = ({
                   </Button>
                 </>
               ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onFolderDelete(file.fileId, file.originalName);
-                  }}
-                >
-                  <Trash2 className="w-3 h-3 mr-1" />
-                  Delete Folder
-                </Button>
+                <>
+                  {onFolderDownload && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onFolderDownload(file.fileId, file.originalName);
+                      }}
+                    >
+                      <Download className="w-3 h-3 mr-1" />
+                      Download ZIP
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFolderDelete(file.fileId, file.originalName);
+                    }}
+                  >
+                    <Trash2 className="w-3 h-3 mr-1" />
+                    Delete Folder
+                  </Button>
+                </>
               )}
             </div>
           )}
@@ -175,16 +192,30 @@ export const FileItemCard = ({
                 </Button>
               </>
             ) : (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onFolderDelete(file.fileId, file.originalName);
-                }}
-              >
-                <Trash2 className="w-3 h-3" />
-              </Button>
+              <>
+                {onFolderDownload && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFolderDownload(file.fileId, file.originalName);
+                    }}
+                  >
+                    <Download className="w-3 h-3" />
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onFolderDelete(file.fileId, file.originalName);
+                  }}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </>
             )}
           </div>
         )}
@@ -245,17 +276,31 @@ export const FileItemCard = ({
                 </Button>
               </div>
             ) : (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onFolderDelete(file.fileId, file.originalName);
-                }}
-              >
-                <Trash2 className="w-3 h-3 mr-1" />
-                Delete
-              </Button>
+              <div className="flex gap-1">
+                {onFolderDownload && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFolderDownload(file.fileId, file.originalName);
+                    }}
+                  >
+                    <Download className="w-3 h-3" />
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onFolderDelete(file.fileId, file.originalName);
+                  }}
+                >
+                  <Trash2 className="w-3 h-3 mr-1" />
+                  Delete
+                </Button>
+              </div>
             )}
           </td>
         )}
@@ -317,16 +362,30 @@ export const FileItemCard = ({
               </Button>
             </>
           ) : (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={(e) => {
-                e.stopPropagation();
-                onFolderDelete(file.fileId, file.originalName);
-              }}
-            >
-              <Trash2 className="w-3 h-3" />
-            </Button>
+            <>
+              {onFolderDownload && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onFolderDownload(file.fileId, file.originalName);
+                  }}
+                >
+                  <Download className="w-3 h-3" />
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFolderDelete(file.fileId, file.originalName);
+                }}
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            </>
           )}
         </div>
       )}

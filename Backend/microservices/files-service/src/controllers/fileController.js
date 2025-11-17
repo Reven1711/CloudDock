@@ -18,28 +18,43 @@ import { MAX_FILE_SIZE } from "../config/aws.js";
 /**
  * Calculate the total size of a folder (including all files and subfolders recursively)
  */
-const calculateFolderSize = async (orgId, folderName, parentFolder) => {
+const calculateFolderSize = async (orgId, folderName, parentFolder, userId, userRole) => {
   try {
     // Construct the folder path
     const folderPath =
       parentFolder === "/" ? `/${folderName}/` : `${parentFolder}${folderName}/`;
 
-    // Find all files and folders within this folder path (recursively)
-    // This regex will match the folder path and any nested paths
-    const files = await FileModel.find({
+    // Build query filter
+    const fileQuery = {
       orgId,
       folder: { $regex: `^${folderPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` },
       isDeleted: false,
       mimeType: { $ne: "application/vnd.clouddock.folder" }, // Exclude folders themselves
-    });
+    };
 
-    // Also get files directly in this folder
-    const directFiles = await FileModel.find({
+    // 🔒 SECURITY: Only filter by userId if not admin
+    if (userRole !== 'admin') {
+      fileQuery["uploadedBy.userId"] = userId;
+    }
+
+    // Find all files within this folder path (recursively)
+    const files = await FileModel.find(fileQuery);
+
+    // Build query for direct files
+    const directFileQuery = {
       orgId,
       folder: folderPath,
       isDeleted: false,
       mimeType: { $ne: "application/vnd.clouddock.folder" },
-    });
+    };
+
+    // 🔒 SECURITY: Only filter by userId if not admin
+    if (userRole !== 'admin') {
+      directFileQuery["uploadedBy.userId"] = userId;
+    }
+
+    // Also get files directly in this folder
+    const directFiles = await FileModel.find(directFileQuery);
 
     // Combine and deduplicate
     const allFiles = [...directFiles, ...files];
@@ -186,19 +201,38 @@ export const createFolder = async (req, res) => {
         ? `/${folderName}/`
         : `${parentFolder}${folderName}/`;
 
-    // Check if folder already exists
+    // Check if folder already exists (excluding soft-deleted folders)
     const existingFolder = await FileModel.findOne({
       orgId,
-      folder: folderPath,
+      folder: parentFolder, // Check in the parent folder, not the new folder path
       fileName: folderName,
       mimeType: "application/vnd.clouddock.folder",
       isDeleted: false,
     });
 
     if (existingFolder) {
-      return res.status(400).json({
-        error: "A folder with this name already exists",
+      return res.status(409).json({
+        error: "A folder with this name already exists in this location",
+        existingFolder: {
+          fileId: existingFolder.fileId,
+          folderName: existingFolder.fileName,
+        },
       });
+    }
+
+    // Check if a deleted folder with same name exists (to reuse or remove)
+    const deletedFolder = await FileModel.findOne({
+      orgId,
+      folder: parentFolder,
+      fileName: folderName,
+      mimeType: "application/vnd.clouddock.folder",
+      isDeleted: true,
+    });
+
+    // If deleted folder exists, remove it permanently to avoid s3Key conflict
+    if (deletedFolder) {
+      await FileModel.deleteOne({ _id: deletedFolder._id });
+      console.log(`♻️ Permanently deleted old folder record: ${folderName}`);
     }
 
     // Create folder record (no S3 upload needed, folders are virtual)
@@ -235,6 +269,15 @@ export const createFolder = async (req, res) => {
     });
   } catch (error) {
     console.error("Folder creation error:", error);
+    
+    // Handle MongoDB duplicate key error
+    if (error.code === 11000) {
+      return res.status(409).json({
+        error: "A folder with this name already exists in this location",
+        message: "Please choose a different folder name",
+      });
+    }
+    
     res.status(500).json({
       error: "Folder creation failed",
       message: error.message,
@@ -298,45 +341,51 @@ export const getFileDownloadUrl = async (req, res) => {
 };
 
 /**
- * Get all files for an organization
+ * Get all files for an organization (filtered by user)
+ * Users can only see their own files unless they are admin
  */
 export const getOrganizationFiles = async (req, res) => {
   try {
     const { orgId } = req.params;
-    const { folder = "/", page = 1, limit = 50 } = req.query;
+    const { folder = "/", page = 1, limit = 50, userId } = req.query;
 
     if (!orgId) {
       return res.status(400).json({ error: "Organization ID is required" });
     }
 
+    if (!userId) {
+      return res.status(400).json({ error: "User ID is required" });
+    }
+
     const skip = (page - 1) * limit;
 
-    const files = await FileModel.find({
+    // Query filter: Only show files uploaded by this user
+    const queryFilter = {
       orgId,
       folder,
       isDeleted: false,
-    })
+      "uploadedBy.userId": userId, // 🔒 SECURITY FIX: Filter by user
+    };
+
+    const files = await FileModel.find(queryFilter)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
-    const totalFiles = await FileModel.countDocuments({
-      orgId,
-      folder,
-      isDeleted: false,
-    });
+    const totalFiles = await FileModel.countDocuments(queryFilter);
 
     // Calculate folder sizes for all folders in the list
     const filesWithCalculatedSizes = await Promise.all(
       files.map(async (file) => {
         let calculatedSize = file.size;
         
-        // If it's a folder, calculate its total size
+        // If it's a folder, calculate its total size (only for this user's files)
         if (file.mimeType === "application/vnd.clouddock.folder") {
           calculatedSize = await calculateFolderSize(
             file.orgId,
             file.fileName,
-            file.folder
+            file.folder,
+            userId // Pass userId to only count user's files
           );
         }
 
@@ -370,6 +419,193 @@ export const getOrganizationFiles = async (req, res) => {
       error: "Failed to retrieve files",
       message: error.message,
     });
+  }
+};
+
+/**
+ * Get ALL organization files (Admin only) - Grouped by users with folder structure
+ */
+export const getAllOrganizationFilesForAdmin = async (req, res) => {
+  try {
+    const { orgId } = req.params;
+    const { folder = "/", page = 1, limit = 100 } = req.query;
+
+    if (!orgId) {
+      return res.status(400).json({ error: "Organization ID is required" });
+    }
+
+    const skip = (page - 1) * limit;
+
+    // Query filter: Get files in the current folder (maintains hierarchy)
+    const queryFilter = {
+      orgId,
+      folder: folder || "/",  // Current folder path
+      isDeleted: false,
+    };
+
+    // Get files in current folder for all users
+    const filesInFolder = await FileModel.find(queryFilter)
+      .sort({ "uploadedBy.userId": 1, mimeType: 1, createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Count ONLY actual files (not folders) for accurate total
+    const totalFilesCount = await FileModel.countDocuments({
+      orgId,
+      isDeleted: false,
+      mimeType: { $ne: "application/vnd.clouddock.folder" }, // Exclude folders from count
+    });
+
+    // Calculate folder sizes
+    const filesWithCalculatedSizes = await Promise.all(
+      filesInFolder.map(async (file) => {
+        let calculatedSize = file.size;
+        
+        if (file.mimeType === "application/vnd.clouddock.folder") {
+          // Calculate folder size (only counts actual files inside, not subfolders)
+          calculatedSize = await calculateFolderSizeForAdmin(
+            file.orgId,
+            file.fileName,
+            file.folder
+          );
+        }
+
+        return {
+          fileId: file.fileId,
+          fileName: file.fileName,
+          originalName: file.originalName,
+          size: calculatedSize,
+          mimeType: file.mimeType,
+          folder: file.folder,
+          uploadedBy: file.uploadedBy,
+          uploadedAt: file.createdAt,
+          virusScanStatus: file.virusScanStatus,
+        };
+      })
+    );
+
+    // Group items by user (maintaining folder structure)
+    const filesByUser = {};
+    filesWithCalculatedSizes.forEach((file) => {
+      const userId = file.uploadedBy.userId;
+      const userName = file.uploadedBy.userName || "Unknown User";
+      const userEmail = file.uploadedBy.userEmail || "";
+
+      if (!filesByUser[userId]) {
+        filesByUser[userId] = {
+          userId,
+          userName,
+          userEmail,
+          files: [],
+          folders: [],
+          totalSize: 0,
+          fileCount: 0,  // Only counts actual files, not folders
+          folderCount: 0,
+        };
+      }
+
+      // Separate files and folders
+      if (file.mimeType === "application/vnd.clouddock.folder") {
+        filesByUser[userId].folders.push(file);
+        filesByUser[userId].folderCount += 1;
+        filesByUser[userId].totalSize += file.size || 0; // Folder size contributes to total
+      } else {
+        filesByUser[userId].files.push(file);
+        filesByUser[userId].fileCount += 1;
+        filesByUser[userId].totalSize += file.size || 0;
+      }
+    });
+
+    // Calculate file counts per user
+    // Root folder shows TOTAL, subfolders show folder-specific count
+    for (const userId in filesByUser) {
+      let actualFileCount;
+      
+      if (folder === "/" || !folder) {
+        // Root folder: Show TOTAL files across all folders
+        actualFileCount = await FileModel.countDocuments({
+          orgId,
+          "uploadedBy.userId": userId,
+          isDeleted: false,
+          mimeType: { $ne: "application/vnd.clouddock.folder" },
+        });
+      } else {
+        // Subfolder: Show only files in THIS folder
+        actualFileCount = await FileModel.countDocuments({
+          orgId,
+          folder: folder,
+          "uploadedBy.userId": userId,
+          isDeleted: false,
+          mimeType: { $ne: "application/vnd.clouddock.folder" },
+        });
+      }
+      
+      filesByUser[userId].fileCount = actualFileCount;
+    }
+
+    // Convert to array and sort by userName
+    const groupedFiles = Object.values(filesByUser).sort((a, b) => 
+      a.userName.localeCompare(b.userName)
+    );
+
+    // Calculate the sum of file counts across displayed users
+    const displayedFilesTotal = groupedFiles.reduce((sum, userGroup) => sum + userGroup.fileCount, 0);
+
+    res.json({
+      success: true,
+      currentFolder: folder || "/",
+      users: groupedFiles,
+      totalUsers: groupedFiles.length,
+      totalFiles: displayedFilesTotal, // Sum of displayed users' file counts
+      organizationTotalFiles: totalFilesCount, // Organization-wide total (for reference)
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(filesInFolder.length / limit),
+        totalItems: filesInFolder.length,
+        limit: parseInt(limit),
+      },
+    });
+  } catch (error) {
+    console.error("Get all organization files error:", error);
+    res.status(500).json({
+      error: "Failed to retrieve files",
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * Calculate folder size for admin (includes all users' files)
+ */
+const calculateFolderSizeForAdmin = async (orgId, folderName, parentFolder) => {
+  try {
+    const folderPath =
+      parentFolder === "/" ? `/${folderName}/` : `${parentFolder}${folderName}/`;
+
+    // Get all files in this folder (no userId filter)
+    const files = await FileModel.find({
+      orgId,
+      folder: { $regex: `^${folderPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` },
+      isDeleted: false,
+      mimeType: { $ne: "application/vnd.clouddock.folder" },
+    });
+
+    const directFiles = await FileModel.find({
+      orgId,
+      folder: folderPath,
+      isDeleted: false,
+      mimeType: { $ne: "application/vnd.clouddock.folder" },
+    });
+
+    const allFiles = [...directFiles, ...files];
+    const uniqueFiles = Array.from(new Set(allFiles.map(f => f.fileId)))
+      .map(id => allFiles.find(f => f.fileId === id));
+
+    const totalSize = uniqueFiles.reduce((sum, file) => sum + (file.size || 0), 0);
+    return totalSize;
+  } catch (error) {
+    console.error("Error calculating folder size for admin:", error);
+    return 0;
   }
 };
 

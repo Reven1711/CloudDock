@@ -17,9 +17,12 @@ import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import {
   getOrganizationFiles,
+  getAllOrganizationFilesForAdmin,
   getStorageInfo,
   getFileDownloadUrl,
   deleteFile,
+  deleteFolder,
+  downloadFolderAsZip,
   formatFileSize,
   getFileIcon,
   formatRelativeTime,
@@ -59,6 +62,8 @@ const AdminDashboard = () => {
 
   // Files state
   const [allFiles, setAllFiles] = useState<FileMetadata[]>([]);
+  const [filesByUser, setFilesByUser] = useState<any[]>([]);
+  const [currentFolder, setCurrentFolder] = useState<string>('/');
   const [loadingFiles, setLoadingFiles] = useState(true);
 
   // Users state
@@ -118,13 +123,26 @@ const AdminDashboard = () => {
     }
   };
 
-  const fetchAllOrgFiles = async () => {
+  const fetchAllOrgFiles = async (folder: string = '/') => {
     if (!user?.tenantId) return;
     
     try {
       setLoadingFiles(true);
-      const response = await getOrganizationFiles(user.tenantId, '/', 1, 100);
-      setAllFiles(response.files);
+      // 🔓 Admin can see ALL files grouped by users (with folder structure)
+      const response = await getAllOrganizationFilesForAdmin(user.tenantId, folder, 1, 100);
+      
+      // Set files grouped by users
+      setFilesByUser(response.users);
+      setCurrentFolder(response.currentFolder || '/');
+      
+      // Also flatten to allFiles for backward compatibility
+      const flatFiles: FileMetadata[] = [];
+      const flatFolders: FileMetadata[] = [];
+      response.users.forEach((userGroup: any) => {
+        if (userGroup.files) flatFiles.push(...userGroup.files);
+        if (userGroup.folders) flatFolders.push(...userGroup.folders);
+      });
+      setAllFiles([...flatFolders, ...flatFiles]); // Folders first, then files
     } catch (error) {
       console.error('Failed to fetch org files:', error);
       toast({
@@ -134,6 +152,133 @@ const AdminDashboard = () => {
       });
     } finally {
       setLoadingFiles(false);
+    }
+  };
+
+  // Navigate to folder
+  const handleFolderClick = (folderName: string, parentFolder: string) => {
+    const newFolderPath = parentFolder === '/' ? `/${folderName}/` : `${parentFolder}${folderName}/`;
+    fetchAllOrgFiles(newFolderPath);
+  };
+
+  // Go back to parent folder
+  const handleBackClick = () => {
+    if (currentFolder === '/') return;
+    
+    const pathParts = currentFolder.split('/').filter(Boolean);
+    pathParts.pop(); // Remove last folder
+    const parentPath = pathParts.length > 0 ? `/${pathParts.join('/')}/` : '/';
+    fetchAllOrgFiles(parentPath);
+  };
+
+  // Handle file download
+  const handleDownload = async (fileId: string, fileName: string) => {
+    try {
+      const downloadUrl = await getFileDownloadUrl(fileId, user?.tenantId || '');
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast({
+        title: "Download started",
+        description: `Downloading ${fileName}`,
+      });
+    } catch (error) {
+      console.error('Download error:', error);
+      toast({
+        title: "Download failed",
+        description: "Could not download the file. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle file delete
+  const handleDeleteFile = async (fileId: string, fileName: string) => {
+    if (!confirm(`Are you sure you want to delete "${fileName}"?`)) {
+      return;
+    }
+
+    try {
+      await deleteFile(fileId, user?.tenantId || '', user?.id || '');
+      
+      toast({
+        title: "File deleted",
+        description: `${fileName} has been deleted successfully.`,
+      });
+
+      // Refresh the file list
+      fetchAllOrgFiles(currentFolder);
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast({
+        title: "Delete failed",
+        description: "Could not delete the file. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle folder delete
+  const handleDeleteFolder = async (folderId: string, folderName: string) => {
+    const confirmed = confirm(
+      `⚠️ Delete folder "${folderName}"?\n\n` +
+      `This will delete:\n` +
+      `• The folder\n` +
+      `• All files inside\n` +
+      `• All subfolders and their contents\n\n` +
+      `This action cannot be undone!`
+    );
+    
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await deleteFolder(folderId, user?.tenantId || '', user?.id || '');
+      
+      toast({
+        title: "Folder deleted",
+        description: `${folderName} and all its contents have been deleted successfully.`,
+      });
+
+      // Refresh the file list
+      fetchAllOrgFiles(currentFolder);
+    } catch (error) {
+      console.error('Delete folder error:', error);
+      toast({
+        title: "Delete failed",
+        description: "Could not delete the folder. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle folder download as ZIP
+  const handleDownloadFolder = async (folderId: string, folderName: string) => {
+    try {
+      toast({
+        title: "Preparing download...",
+        description: `Creating ZIP archive for "${folderName}"`,
+      });
+
+      // Admin can download any folder - don't pass userId to see all files
+      await downloadFolderAsZip(folderId, folderName, user?.tenantId || '', undefined);
+      
+      toast({
+        title: "Download started",
+        description: `${folderName}.zip is being downloaded.`,
+      });
+    } catch (error) {
+      console.error('Download folder error:', error);
+      toast({
+        title: "Download failed",
+        description: "Could not download the folder. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -526,16 +671,121 @@ const AdminDashboard = () => {
                       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
                       <p className="mt-4 text-muted-foreground">Loading files...</p>
                     </div>
-                  ) : allFiles.length === 0 ? (
+                  ) : filesByUser.length === 0 ? (
                     <div className="text-center py-12 glass-card rounded-lg border-primary/20">
                       <p className="text-muted-foreground">No files uploaded yet by any users.</p>
                     </div>
                   ) : (
+                    <div className="space-y-6">
+                      {/* Breadcrumb Navigation */}
+                      <div className="flex items-center gap-2 text-sm mb-4">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => fetchAllOrgFiles('/')}
+                          disabled={currentFolder === '/'}
+                        >
+                          🏠 Root
+                        </Button>
+                        {currentFolder !== '/' && (
+                          <>
+                            {currentFolder.split('/').filter(Boolean).map((folder, index, arr) => (
+                              <div key={index} className="flex items-center gap-2">
+                                <span className="text-muted-foreground">/</span>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => {
+                                    const path = '/' + arr.slice(0, index + 1).join('/') + '/';
+                                    fetchAllOrgFiles(path);
+                                  }}
+                                  className="text-primary"
+                                >
+                                  📁 {folder}
+                                </Button>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                        {currentFolder !== '/' && (
+                          <Button variant="outline" size="sm" onClick={handleBackClick}>
+                            ← Back
+                          </Button>
+                        )}
+                      </div>
+
+                      {filesByUser.map((userGroup) => (
+                        <div key={userGroup.userId} className="glass-card border-primary/20 p-6 rounded-lg">
+                          {/* User Header */}
+                          <div className="flex items-center justify-between mb-4 pb-4 border-b border-primary/20">
+                            <div>
+                              <h3 className="font-semibold text-lg flex items-center gap-2">
+                                <Users className="w-5 h-5 text-primary" />
+                                {userGroup.userName}
+                              </h3>
+                              <p className="text-sm text-muted-foreground">{userGroup.userEmail}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-medium">
+                                {userGroup.fileCount} files {userGroup.folderCount > 0 && `• ${userGroup.folderCount} folders`}
+                              </p>
+                              <p className="text-xs text-muted-foreground">{formatFileSize(userGroup.totalSize)}</p>
+                            </div>
+                          </div>
+
+                          {/* User's Folders and Files */}
+                          {(userGroup.folders?.length === 0 && userGroup.files?.length === 0) ? (
+                            <p className="text-center text-muted-foreground py-4">No files in this folder</p>
+                          ) : (
                     <>
                       {/* Large Icons View */}
                       {tenant.dashboard.fileViewLayout === 'large-icons' && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                          {allFiles.map((file) => (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {/* Folders First */}
+                          {userGroup.folders?.map((folder: FileMetadata) => (
+                            <div 
+                              key={folder.fileId} 
+                              className="glass-card border-primary/20 p-6 rounded-lg hover:scale-105 transition-transform cursor-pointer group relative"
+                              onClick={() => handleFolderClick(folder.fileName, folder.folder)}
+                            >
+                              <div className="flex flex-col items-center text-center space-y-3">
+                                <div className="text-6xl">📁</div>
+                                <div className="w-full">
+                                  <h4 className="font-semibold truncate">{folder.originalName}</h4>
+                                  <p className="text-sm text-muted-foreground">{formatFileSize(folder.size)}</p>
+                                  <p className="text-xs text-muted-foreground">{formatRelativeTime(folder.uploadedAt)}</p>
+                                  <p className="text-xs text-primary mt-2">Folder</p>
+                                </div>
+                                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDownloadFolder(folder.fileId, folder.originalName);
+                                    }}
+                                    title="Download as ZIP"
+                                  >
+                                    <Download className="w-3 h-3" />
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    variant="destructive"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteFolder(folder.fileId, folder.originalName);
+                                    }}
+                                    title="Delete folder"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          
+                          {/* Then Files */}
+                          {userGroup.files?.map((file: FileMetadata) => (
                             <div key={file.fileId} className="glass-card border-primary/20 p-6 rounded-lg hover:scale-105 transition-transform group">
                               <div className="flex flex-col items-center text-center space-y-3">
                                 <div className="text-6xl">{getFileIcon(file.mimeType)}</div>
@@ -546,10 +796,24 @@ const AdminDashboard = () => {
                                   <p className="text-xs text-primary mt-2">Owner: {file.uploadedBy.userName}</p>
                                 </div>
                                 <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <Button size="sm" variant="outline">
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDownload(file.fileId, file.originalName);
+                                    }}
+                                  >
                                     <Download className="w-3 h-3" />
                                   </Button>
-                                  <Button size="sm" variant="outline">
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteFile(file.fileId, file.originalName);
+                                    }}
+                                  >
                                     <Trash2 className="w-3 h-3" />
                                   </Button>
                                 </div>
@@ -562,7 +826,49 @@ const AdminDashboard = () => {
                       {/* List View */}
                       {tenant.dashboard.fileViewLayout === 'list' && (
                         <div className="space-y-2">
-                          {allFiles.map((file) => (
+                          {/* Folders First */}
+                          {userGroup.folders?.map((folder: FileMetadata) => (
+                            <div 
+                              key={folder.fileId} 
+                              className="glass-card border-primary/20 p-3 rounded-lg flex items-center gap-4 hover:bg-primary/5 transition-colors cursor-pointer group"
+                              onClick={() => handleFolderClick(folder.fileName, folder.folder)}
+                            >
+                              <div className="text-2xl">📁</div>
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-medium truncate">{folder.originalName}</h4>
+                              </div>
+                              <div className="text-sm text-muted-foreground">{formatFileSize(folder.size)}</div>
+                              <div className="text-sm text-muted-foreground w-24">{formatRelativeTime(folder.uploadedAt)}</div>
+                              <div className="text-xs text-primary w-32">Folder</div>
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDownloadFolder(folder.fileId, folder.originalName);
+                                  }}
+                                  title="Download as ZIP"
+                                >
+                                  <Download className="w-3 h-3" />
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="destructive"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteFolder(folder.fileId, folder.originalName);
+                                  }}
+                                  title="Delete folder"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                          
+                          {/* Then Files */}
+                          {userGroup.files?.map((file: FileMetadata) => (
                             <div key={file.fileId} className="glass-card border-primary/20 p-3 rounded-lg flex items-center gap-4 hover:bg-primary/5 transition-colors group">
                               <div className="text-2xl">{getFileIcon(file.mimeType)}</div>
                               <div className="flex-1 min-w-0">
@@ -572,10 +878,24 @@ const AdminDashboard = () => {
                               <div className="text-sm text-muted-foreground w-24">{formatRelativeTime(file.uploadedAt)}</div>
                               <div className="text-xs text-primary w-32 truncate">{file.uploadedBy.userName}</div>
                               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button size="sm" variant="ghost">
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDownload(file.fileId, file.originalName);
+                                  }}
+                                >
                                   <Download className="w-3 h-3" />
                                 </Button>
-                                <Button size="sm" variant="ghost">
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteFile(file.fileId, file.originalName);
+                                  }}
+                                >
                                   <Trash2 className="w-3 h-3" />
                                 </Button>
                               </div>
@@ -598,7 +918,51 @@ const AdminDashboard = () => {
                               </tr>
                             </thead>
                             <tbody>
-                              {allFiles.map((file, index) => (
+                              {/* Folders First */}
+                              {userGroup.folders?.map((folder: FileMetadata, index: number) => (
+                                <tr 
+                                  key={folder.fileId} 
+                                  className={`border-b border-primary/10 hover:bg-primary/5 transition-colors cursor-pointer group ${index % 2 === 0 ? 'bg-background/50' : ''}`}
+                                  onClick={() => handleFolderClick(folder.fileName, folder.folder)}
+                                >
+                                  <td className="p-3 flex items-center gap-3">
+                                    <span className="text-xl">📁</span>
+                                    <span className="font-medium">{folder.originalName}</span>
+                                  </td>
+                                  <td className="p-3 text-sm text-muted-foreground">{formatFileSize(folder.size)}</td>
+                                  <td className="p-3 text-sm text-muted-foreground">{formatRelativeTime(folder.uploadedAt)}</td>
+                                  <td className="p-3 text-sm text-primary">Folder</td>
+                                  <td className="p-3">
+                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Button 
+                                        size="sm" 
+                                        variant="outline"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDownloadFolder(folder.fileId, folder.originalName);
+                                        }}
+                                        title="Download as ZIP"
+                                      >
+                                        <Download className="w-3 h-3" />
+                                      </Button>
+                                      <Button 
+                                        size="sm" 
+                                        variant="destructive"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteFolder(folder.fileId, folder.originalName);
+                                        }}
+                                        title="Delete folder"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                              
+                              {/* Then Files */}
+                              {userGroup.files?.map((file: FileMetadata, index: number) => (
                                 <tr key={file.fileId} className={`border-b border-primary/10 hover:bg-primary/5 transition-colors ${index % 2 === 0 ? 'bg-background/50' : ''}`}>
                                   <td className="p-3 flex items-center gap-3">
                                     <span className="text-xl">{getFileIcon(file.mimeType)}</span>
@@ -609,10 +973,24 @@ const AdminDashboard = () => {
                                   <td className="p-3 text-sm text-primary">{file.uploadedBy.userName}</td>
                                   <td className="p-3">
                                     <div className="flex gap-1">
-                                      <Button size="sm" variant="ghost">
+                                      <Button 
+                                        size="sm" 
+                                        variant="ghost"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDownload(file.fileId, file.originalName);
+                                        }}
+                                      >
                                         <Download className="w-3 h-3" />
                                       </Button>
-                                      <Button size="sm" variant="ghost">
+                                      <Button 
+                                        size="sm" 
+                                        variant="ghost"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteFile(file.fileId, file.originalName);
+                                        }}
+                                      >
                                         <Trash2 className="w-3 h-3" />
                                       </Button>
                                     </div>
@@ -627,7 +1005,47 @@ const AdminDashboard = () => {
                       {/* Tiles View */}
                       {tenant.dashboard.fileViewLayout === 'tiles' && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                          {allFiles.map((file) => (
+                          {/* Folders First */}
+                          {userGroup.folders?.map((folder: FileMetadata) => (
+                            <div 
+                              key={folder.fileId} 
+                              className="glass-card border-primary/20 p-4 rounded-lg hover:shadow-lg transition-shadow cursor-pointer group relative"
+                              onClick={() => handleFolderClick(folder.fileName, folder.folder)}
+                            >
+                              <div className="text-4xl mb-3">📁</div>
+                              <h4 className="font-semibold text-sm truncate mb-1">{folder.originalName}</h4>
+                              <p className="text-xs text-muted-foreground">{formatFileSize(folder.size)}</p>
+                              <p className="text-xs text-muted-foreground">{formatRelativeTime(folder.uploadedAt)}</p>
+                              <p className="text-xs text-primary mt-1">Folder</p>
+                              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDownloadFolder(folder.fileId, folder.originalName);
+                                  }}
+                                  title="Download as ZIP"
+                                >
+                                  <Download className="w-3 h-3" />
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="destructive"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteFolder(folder.fileId, folder.originalName);
+                                  }}
+                                  title="Delete folder"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                          
+                          {/* Then Files */}
+                          {userGroup.files?.map((file: FileMetadata) => (
                             <div key={file.fileId} className="glass-card border-primary/20 p-4 rounded-lg hover:shadow-lg transition-shadow group">
                               <div className="text-4xl mb-3">{getFileIcon(file.mimeType)}</div>
                               <h4 className="font-semibold text-sm truncate mb-1">{file.originalName}</h4>
@@ -635,10 +1053,24 @@ const AdminDashboard = () => {
                               <p className="text-xs text-muted-foreground">{formatRelativeTime(file.uploadedAt)}</p>
                               <p className="text-xs text-primary mt-2 truncate">By: {file.uploadedBy.userName}</p>
                               <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button size="sm" variant="ghost">
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDownload(file.fileId, file.originalName);
+                                  }}
+                                >
                                   <Download className="w-3 h-3" />
                                 </Button>
-                                <Button size="sm" variant="ghost">
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteFile(file.fileId, file.originalName);
+                                  }}
+                                >
                                   <Trash2 className="w-3 h-3" />
                                 </Button>
                               </div>
@@ -647,6 +1079,10 @@ const AdminDashboard = () => {
                         </div>
                       )}
                     </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </CardContent>
               </Card>

@@ -322,15 +322,33 @@ export const createFolder = async (
 };
 
 /**
- * Get organization files
+ * Get organization files (filtered by userId for security)
+ * Users can only see their own files
  */
 export const getOrganizationFiles = async (
   orgId: string,
+  userId: string,
   folder: string = '/',
   page: number = 1,
   limit: number = 50
 ): Promise<{ files: FileMetadata[]; pagination: any }> => {
   const response = await axios.get(`${API_BASE_URL}/files/org/${orgId}`, {
+    params: { folder, page, limit, userId }, // 🔒 Pass userId for security filtering
+  });
+
+  return response.data;
+};
+
+/**
+ * Get ALL organization files grouped by users (Admin only)
+ */
+export const getAllOrganizationFilesForAdmin = async (
+  orgId: string,
+  folder: string = '/',
+  page: number = 1,
+  limit: number = 100
+): Promise<{ users: any[]; totalUsers: number; totalFiles: number; currentFolder: string; pagination: any }> => {
+  const response = await axios.get(`${API_BASE_URL}/files/org/${orgId}/all`, {
     params: { folder, page, limit },
   });
 
@@ -451,6 +469,41 @@ export const deleteFolder = async (
     }
   );
   return response.data;
+};
+
+/**
+ * Download folder as ZIP
+ */
+export const downloadFolderAsZip = async (
+  folderId: string,
+  folderName: string,
+  orgId: string,
+  userId?: string
+): Promise<void> => {
+  try {
+    const response = await axios.get(
+      `${API_BASE_URL}/files/folder/${folderId}/download`,
+      {
+        params: { orgId, userId },
+        responseType: 'blob', // Important: Receive as binary data
+      }
+    );
+
+    // Create a download link
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${folderName}.zip`);
+    document.body.appendChild(link);
+    link.click();
+    
+    // Clean up
+    link.parentNode?.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Download folder error:', error);
+    throw error;
+  }
 };
 
 /**

@@ -142,3 +142,21 @@ export const getS3FileMetadata = async (s3Key) => {
     throw new Error(`Failed to get file metadata: ${error.message}`);
   }
 };
+
+/**
+ * Get S3 object (for ZIP creation)
+ */
+export const getS3Object = async (s3Key) => {
+  try {
+    const command = new GetObjectCommand({
+      Bucket: S3_BUCKET_NAME,
+      Key: s3Key,
+    });
+
+    const response = await s3Client.send(command);
+    return response;
+  } catch (error) {
+    console.error("Error getting S3 object:", error);
+    throw new Error(`Failed to get S3 object: ${error.message}`);
+  }
+};

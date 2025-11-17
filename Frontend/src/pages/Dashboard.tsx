@@ -15,6 +15,7 @@ import {
   deleteFile,
   bulkDeleteFiles,
   deleteFolder,
+  downloadFolderAsZip,
   formatFileSize,
   getFileIcon,
   formatRelativeTime,
@@ -159,11 +160,12 @@ const Dashboard = () => {
 
   // Fetch files from API
   const fetchFiles = async (folder: string = currentFolder) => {
-    if (!user?.tenantId) return;
+    if (!user?.tenantId || !user?.id) return;
 
     try {
       setLoading(true);
-      const response = await getOrganizationFiles(user.tenantId, folder, 1, 100);
+      // 🔒 Pass userId to only fetch user's own files
+      const response = await getOrganizationFiles(user.tenantId, user.id, folder, 1, 100);
       setFiles(response.files);
     } catch (error) {
       console.error('Failed to fetch files:', error);
@@ -417,6 +419,31 @@ const Dashboard = () => {
     }
   };
 
+  const handleFolderDownload = async (fileId: string, folderName: string) => {
+    if (!user?.tenantId) return;
+
+    try {
+      toast({
+        title: "Preparing download...",
+        description: `Creating ZIP archive for "${folderName}"`,
+      });
+
+      await downloadFolderAsZip(fileId, folderName, user.tenantId, user.id);
+      
+      toast({
+        title: "Download started",
+        description: `${folderName}.zip is being downloaded.`,
+      });
+    } catch (error: any) {
+      console.error('Folder download failed:', error);
+      toast({
+        title: "Download failed",
+        description: error.response?.data?.message || "Could not download folder. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Filter files based on search query
   const filteredFiles = files.filter(file =>
     file.originalName.toLowerCase().includes(searchQuery.toLowerCase())
@@ -656,6 +683,7 @@ const Dashboard = () => {
                                   onDownload={handleDownload}
                                   onDelete={handleDelete}
                                   onFolderDelete={handleFolderDelete}
+                                  onFolderDownload={handleFolderDownload}
                                   animationDelay={index * 50}
                                 />
                               ))}
@@ -677,6 +705,7 @@ const Dashboard = () => {
                               onDownload={handleDownload}
                               onDelete={handleDelete}
                               onFolderDelete={handleFolderDelete}
+                              onFolderDownload={handleFolderDownload}
                               animationDelay={index * 50}
                             />
                           ))}
@@ -709,6 +738,7 @@ const Dashboard = () => {
                                   onDownload={handleDownload}
                                   onDelete={handleDelete}
                                   onFolderDelete={handleFolderDelete}
+                                  onFolderDownload={handleFolderDownload}
                                   animationDelay={index * 50}
                                 />
                               ))}
@@ -732,6 +762,7 @@ const Dashboard = () => {
                               onDownload={handleDownload}
                               onDelete={handleDelete}
                               onFolderDelete={handleFolderDelete}
+                              onFolderDownload={handleFolderDownload}
                               animationDelay={index * 50}
                             />
                           ))}
