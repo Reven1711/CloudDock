@@ -103,13 +103,24 @@ export const decrementStorageUsage = async (orgId, fileSize) => {
 
 /**
  * Recalculate storage usage from actual files
+ * NOTE: Folders are virtual and should NOT be counted in storage or file count
  */
 export const recalculateStorageUsage = async (orgId) => {
   try {
-    const files = await FileModel.find({ orgId, isDeleted: false });
+    // 🔒 Only count actual files, exclude folders (virtual)
+    const files = await FileModel.find({
+      orgId,
+      isDeleted: false,
+      mimeType: { $ne: "application/vnd.clouddock.folder" }, // Exclude folders
+    });
 
-    const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+    // Calculate total size and count only for actual files
+    const totalSize = files.reduce((sum, file) => sum + (file.size || 0), 0);
     const fileCount = files.length;
+
+    console.log(`📊 Recalculating storage for orgId: ${orgId}`);
+    console.log(`   - Actual files found: ${fileCount}`);
+    console.log(`   - Total size: ${(totalSize / (1024 * 1024 * 1024)).toFixed(2)} GB`);
 
     const quota = await StorageQuotaModel.findOne({ orgId });
 
@@ -122,6 +133,9 @@ export const recalculateStorageUsage = async (orgId) => {
     quota.lastCalculated = new Date();
 
     await quota.save();
+    
+    console.log(`✅ Storage recalculated: ${fileCount} files, ${(totalSize / (1024 * 1024 * 1024)).toFixed(2)} GB used`);
+    
     return quota;
   } catch (error) {
     console.error("Error recalculating storage usage:", error);
