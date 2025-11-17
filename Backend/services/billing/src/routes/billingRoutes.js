@@ -4,6 +4,7 @@ import {
   handleWebhook,
   getPurchaseHistory,
   completePayment,
+  syncPurchasesToStorage,
 } from "../controllers/stripeController.js";
 
 const router = express.Router();
@@ -13,6 +14,9 @@ router.post("/storage/checkout", createCheckoutSession);
 
 // Complete payment manually (for development without webhooks)
 router.post("/storage/complete", completePayment);
+
+// Manually sync all completed purchases to storage quota
+router.post("/storage/sync/:orgId", syncPurchasesToStorage);
 
 // Get purchase history for an organization
 router.get("/storage/history/:orgId", getPurchaseHistory);

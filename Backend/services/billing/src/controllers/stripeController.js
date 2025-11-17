@@ -282,6 +282,118 @@ export const getPurchaseHistory = async (req, res) => {
 };
 
 /**
+ * Manually sync all completed purchases to storage quota
+ * This checks for completed purchases and ensures they're applied to the organization's storage
+ */
+export const syncPurchasesToStorage = async (req, res) => {
+  try {
+    const { orgId } = req.params;
+
+    console.log(`🔄 [SYNC] Starting storage sync for orgId: ${orgId}`);
+
+    // Get all completed purchases for this organization
+    const completedPurchases = await StoragePurchaseModel.find({
+      orgId,
+      status: "completed",
+    }).sort({ createdAt: 1 });
+
+    console.log(
+      `📊 [SYNC] Found ${completedPurchases.length} completed purchases`
+    );
+
+    if (completedPurchases.length === 0) {
+      return res.json({
+        success: true,
+        message: "No completed purchases to sync",
+        purchasesProcessed: 0,
+      });
+    }
+
+    // Get current storage quota
+    let storageQuota = await StorageQuotaModel.findOne({ orgId });
+
+    if (!storageQuota) {
+      console.log(`⚠️  [SYNC] StorageQuota not found, creating new one...`);
+      storageQuota = new StorageQuotaModel({
+        orgId,
+        totalQuota: 1024 * 1024 * 1024, // 1 GB default
+        usedStorage: 0,
+        fileCount: 0,
+        isPaidPlan: false,
+        paidStorageGB: 0,
+      });
+    }
+
+    console.log(`📊 [SYNC] Current storage quota:`, {
+      totalQuota: storageQuota.totalQuota,
+      totalQuotaGB: (storageQuota.totalQuota / (1024 * 1024 * 1024)).toFixed(
+        2
+      ),
+      paidStorageGB: storageQuota.paidStorageGB,
+    });
+
+    // Calculate total purchased storage from all completed purchases
+    const totalPurchasedGB = completedPurchases.reduce(
+      (sum, p) => sum + parseFloat(p.storageGB),
+      0
+    );
+
+    // Calculate what should be the correct total
+    const baseStorageGB = 1; // 1 GB base
+    const correctTotalGB = baseStorageGB + totalPurchasedGB;
+    const correctTotalBytes = correctTotalGB * 1024 * 1024 * 1024;
+
+    console.log(`📊 [SYNC] Storage calculation:`, {
+      baseStorageGB,
+      totalPurchasedGB,
+      correctTotalGB,
+      currentTotalGB: (
+        storageQuota.totalQuota /
+        (1024 * 1024 * 1024)
+      ).toFixed(2),
+    });
+
+    // Update storage quota to the correct total
+    storageQuota.totalQuota = correctTotalBytes;
+    storageQuota.paidStorageGB = totalPurchasedGB;
+    storageQuota.isPaidPlan = totalPurchasedGB > 0;
+    await storageQuota.save();
+
+    // Also update Organization model
+    const organization = await OrganizationModel.findOne({ orgId });
+    if (organization) {
+      organization.quota = correctTotalGB;
+      await organization.save();
+      console.log(`✅ [SYNC] Updated Organization quota to ${correctTotalGB} GB`);
+    }
+
+    console.log(`✅ [SYNC] Storage quota synced successfully:`, {
+      totalQuota: storageQuota.totalQuota,
+      totalQuotaGB: (storageQuota.totalQuota / (1024 * 1024 * 1024)).toFixed(
+        2
+      ),
+      paidStorageGB: storageQuota.paidStorageGB,
+      purchasesProcessed: completedPurchases.length,
+    });
+
+    res.json({
+      success: true,
+      message: "Storage quota synced successfully",
+      purchasesProcessed: completedPurchases.length,
+      totalPurchasedGB,
+      newTotalGB: correctTotalGB,
+      newTotalQuota: storageQuota.totalQuota,
+    });
+  } catch (error) {
+    console.error("❌ [SYNC] Sync purchases error:", error);
+    res.status(500).json({
+      error: "Failed to sync purchases to storage",
+      message: error.message,
+    });
+  }
+};
+
+/**
  * Complete a payment manually (for development without webhooks)
  * This retrieves the session from Stripe and completes the purchase
  */
