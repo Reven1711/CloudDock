@@ -189,9 +189,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = () => {
+    // Clear all auth-related data from localStorage
     persistUser(null);
-    // Redirect to home page after logout
-    window.location.href = '/';
+    localStorage.removeItem(STORAGE_KEYS.user);
+    localStorage.removeItem(STORAGE_KEYS.usage);
+    localStorage.removeItem(STORAGE_KEYS.tenants);
+    localStorage.removeItem(STORAGE_KEYS.pendingUsers);
+    
+    // Clear any other session data
+    sessionStorage.clear();
+    
+    // Force redirect to home page after logout
+    window.location.replace('/');
   };
 
   const value = useMemo<AuthContextType>(() => ({

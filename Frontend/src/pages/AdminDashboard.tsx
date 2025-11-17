@@ -29,7 +29,7 @@ import {
 import { getStoragePurchaseHistory } from '@/services/billingService';
 
 const AdminDashboard = () => {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { tenant, setTenant } = useTenant();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -357,7 +357,7 @@ const AdminDashboard = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => window.location.href = '/'}
+              onClick={signOut}
               className="glass-card border-primary/20"
             >
               <LogOut className="w-4 h-4 mr-2" />

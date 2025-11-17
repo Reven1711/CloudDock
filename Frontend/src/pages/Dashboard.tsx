@@ -410,7 +410,7 @@ const Dashboard = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => window.location.href = '/'}
+              onClick={signOut}
               className="glass-card border-primary/20"
             >
               Logout
